@@ -186,10 +186,17 @@ func (t *StateTest) RunNoVerify(subtest StateSubtest, vmconfig vm.Config, snapsh
 	context.GetHash = vmTestBlockHash
 	evm := vm.NewEVM(context, statedb, config, vmconfig)
 
-	gaspool := new(core.GasPool)
-	gaspool.AddGas(block.GasLimit())
+	var gp1559 *core.GasPool
+	var gaspool *core.GasPool
+	if config.IsEIP1559(block.Number()) {
+		gaspool = new(core.GasPool).AddGas(config.EIP1559.MaxGas - block.GasLimit())
+		gp1559 = new(core.GasPool).AddGas(block.GasLimit())
+	} else {
+		gaspool = new(core.GasPool).AddGas(block.GasLimit())
+	}
+
 	snapshot := statedb.Snapshot()
-	if _, err := core.ApplyMessage(evm, msg, gaspool); err != nil {
+	if _, err := core.ApplyMessage(evm, msg, gaspool, gp1559); err != nil {
 		statedb.RevertToSnapshot(snapshot)
 	}
 	// Commit block
@@ -289,7 +296,7 @@ func (tx *stTransaction) toMessage(ps stPostState) (core.Message, error) {
 		return nil, fmt.Errorf("invalid tx data %q", dataHex)
 	}
 
-	msg := types.NewMessage(from, to, tx.Nonce, value, gasLimit, tx.GasPrice, data, true)
+	msg := types.NewMessage(from, to, tx.Nonce, value, gasLimit, tx.GasPrice, data, true, nil, nil)
 	return msg, nil
 }
 

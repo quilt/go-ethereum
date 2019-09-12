@@ -947,7 +947,7 @@ func testExternalUI(api *core.SignerAPI) {
 			Value:    hexutil.Big(*big.NewInt(6)),
 			From:     common.NewMixedcaseAddress(a),
 			To:       &to,
-			GasPrice: hexutil.Big(*big.NewInt(5)),
+			GasPrice: (*hexutil.Big)(big.NewInt(5)),
 			Gas:      1000,
 			Input:    nil,
 		}
@@ -1083,7 +1083,7 @@ func GenDoc(ctx *cli.Context) {
 				Value:    hexutil.Big(*big.NewInt(6)),
 				From:     common.NewMixedcaseAddress(a),
 				To:       nil,
-				GasPrice: hexutil.Big(*big.NewInt(5)),
+				GasPrice: (*hexutil.Big)(big.NewInt(5)),
 				Gas:      1000,
 				Input:    nil,
 			}})
@@ -1099,7 +1099,7 @@ func GenDoc(ctx *cli.Context) {
 					Value:    hexutil.Big(*big.NewInt(6)),
 					From:     common.NewMixedcaseAddress(a),
 					To:       nil,
-					GasPrice: hexutil.Big(*big.NewInt(5)),
+					GasPrice: (*hexutil.Big)(big.NewInt(5)),
 					Gas:      1000,
 					Input:    nil,
 				}})
