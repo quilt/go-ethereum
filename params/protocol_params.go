@@ -129,6 +129,17 @@ const (
 	Bn256PairingBaseGasIstanbul      uint64 = 45000  // Base price for an elliptic curve pairing check
 	Bn256PairingPerPointGasByzantium uint64 = 80000  // Byzantium per-point price for an elliptic curve pairing check
 	Bn256PairingPerPointGasIstanbul  uint64 = 34000  // Per-point price for an elliptic curve pairing check
+
+	EIP1559InitialBaseFee           uint64 = 1000000000 // Wei used as the initial BaseFee
+	EIP1559ForkBlockNumber          uint64 = 110000000  // TBD
+	EIP1559ForkFinalizedBlockNumber        = EIP1559ForkBlockNumber + EIP1559DecayRange
+	BaseFeeMaxChangeDenominator     uint64 = 8
+	TargetGasUsed                   uint64 = 10000000
+	SlackCoefficient                uint64 = 2
+	MaxGasEIP1559                          = SlackCoefficient * TargetGasUsed
+	EIP1559DecayRange               uint64 = 1000000
+	EIP1559GasIncrementAmount              = (MaxGasEIP1559 / 2) / EIP1559DecayRange // We need to shift (MaxGasEIP1559 / 2) gas from the legacy pool into the EIP1559 pool over the EIP1559DecayRange
+	PerTransactionGasLimit          uint64 = 8000000
 )
 
 var (

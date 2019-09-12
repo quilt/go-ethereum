@@ -343,6 +343,27 @@ func (pool *TxPool) Stats() (pending int) {
 
 // validateTx checks whether a transaction is valid according to the consensus rules.
 func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error {
+	header := pool.chain.GetHeaderByHash(pool.head)
+
+	// EIP1559 guards
+	eip1559 := pool.config.IsEIP1559(header.Number)
+	eip1559Finalized := pool.config.IsEIP1559Finalized(header.Number)
+	if eip1559 && header.BaseFee == nil {
+		return core.ErrNoBaseFee
+	}
+	if eip1559Finalized && (tx.GasPremium() == nil || tx.FeeCap() == nil || tx.GasPrice() != nil) {
+		return core.ErrTxNotEIP1559
+	}
+	if !eip1559 && (tx.GasPremium() != nil || tx.FeeCap() != nil || tx.GasPrice() == nil) {
+		return core.ErrTxIsEIP1559
+	}
+	if tx.GasPrice() != nil && (tx.GasPremium() != nil || tx.FeeCap() != nil) {
+		return core.ErrTxSetsLegacyAndEIP1559Fields
+	}
+	if tx.GasPrice() == nil && (tx.GasPremium() == nil || tx.FeeCap() == nil) {
+		return core.ErrMissingGasFields
+	}
+
 	// Validate sender
 	var (
 		from common.Address
@@ -362,9 +383,29 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 
 	// Check the transaction doesn't exceed the current
 	// block limit gas.
-	header := pool.chain.GetHeaderByHash(pool.head)
-	if header.GasLimit < tx.Gas() {
-		return core.ErrGasLimit
+	var legacyGasLimit, eip1559GasLimit uint64
+	if pool.config.IsEIP1559(header.Number) {
+		legacyGasLimit = pool.config.EIP1559.MaxGas - header.GasLimit
+		eip1559GasLimit = header.GasLimit
+	} else {
+		legacyGasLimit = header.GasLimit
+	}
+	if tx.GasPrice() != nil && legacyGasLimit < tx.Gas() {
+		return core.ErrLegacyGasLimit
+	}
+	if tx.GasPremium() != nil && eip1559GasLimit < tx.Gas() {
+		return core.ErrEIP1559GasLimit
+	}
+
+	// Derive the gasPrice from the tx.GasPremium() and tx.FeeCap() (EIP1559 transaction) to ensure it is greater than BaseFee
+	if tx.GasPremium() != nil {
+		gasPrice := new(big.Int).Add(pool.chain.CurrentHeader().BaseFee, tx.GasPremium())
+		if gasPrice.Cmp(tx.FeeCap()) > 0 {
+			gasPrice.Set(tx.FeeCap())
+		}
+		if gasPrice.Cmp(pool.chain.CurrentHeader().BaseFee) < 0 {
+			return core.ErrEIP1559GasPriceLessThanBaseFee
+		}
 	}
 
 	// Transactions can't be negative. This may never happen
@@ -376,7 +417,7 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
-	if b := currentState.GetBalance(from); b.Cmp(tx.Cost()) < 0 {
+	if b := currentState.GetBalance(from); b.Cmp(tx.Cost(header.BaseFee)) < 0 {
 		return core.ErrInsufficientFunds
 	}
 
@@ -397,7 +438,7 @@ func (pool *TxPool) add(ctx context.Context, tx *types.Transaction) error {
 	hash := tx.Hash()
 
 	if pool.pending[hash] != nil {
-		return fmt.Errorf("Known transaction (%x)", hash[:4])
+		return fmt.Errorf("known transaction (%x)", hash[:4])
 	}
 	err := pool.validateTx(ctx, tx)
 	if err != nil {

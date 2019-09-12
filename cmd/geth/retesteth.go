@@ -207,6 +207,10 @@ func (e *NoRewardEngine) VerifyHeaders(chain consensus.ChainReader, headers []*t
 	return e.inner.VerifyHeaders(chain, headers, seals)
 }
 
+func (e *NoRewardEngine) VerifyTransactions(chain consensus.ChainReader, block *types.Block) error {
+	return e.inner.VerifyTransactions(chain, block)
+}
+
 func (e *NoRewardEngine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
 	return e.inner.VerifyUncles(chain, block)
 }
@@ -497,7 +501,16 @@ func (api *RetestethAPI) mineBlock() error {
 	if api.chainConfig.DAOForkSupport && api.chainConfig.DAOForkBlock != nil && api.chainConfig.DAOForkBlock.Cmp(header.Number) == 0 {
 		misc.ApplyDAOHardFork(statedb)
 	}
-	gasPool := new(core.GasPool).AddGas(header.GasLimit)
+
+	var gp1559 *core.GasPool
+	var gasPool *core.GasPool
+	if api.chainConfig.IsEIP1559(header.Number) {
+		gasPool = new(core.GasPool).AddGas(api.chainConfig.EIP1559.MaxGas - header.GasLimit)
+		gp1559 = new(core.GasPool).AddGas(header.GasLimit)
+	} else {
+		gasPool = new(core.GasPool).AddGas(header.GasLimit)
+	}
+
 	txCount := 0
 	var txs []*types.Transaction
 	var receipts []*types.Receipt
@@ -518,6 +531,7 @@ func (api *RetestethAPI) mineBlock() error {
 					api.blockchain,
 					&api.author,
 					gasPool,
+					gp1559,
 					statedb,
 					header, tx, &header.GasUsed, *api.blockchain.GetVMConfig(),
 				)
@@ -661,7 +675,11 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 			context := core.NewEVMContext(msg, block.Header(), api.blockchain, nil)
 			// Not yet the searched for transaction, execute on top of the current state
 			vmenv := vm.NewEVM(context, statedb, api.blockchain.Config(), vm.Config{})
-			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
+			var gp1559 *core.GasPool
+			if vmenv.ChainConfig().IsEIP1559(block.Number()) {
+				gp1559 = new(core.GasPool).AddGas(tx.Gas())
+			}
+			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas()), gp1559); err != nil {
 				return AccountRangeResult{}, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 			}
 			// Ensure any modifications are committed to the state
@@ -771,7 +789,11 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 			context := core.NewEVMContext(msg, block.Header(), api.blockchain, nil)
 			// Not yet the searched for transaction, execute on top of the current state
 			vmenv := vm.NewEVM(context, statedb, api.blockchain.Config(), vm.Config{})
-			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
+			var gp1559 *core.GasPool
+			if vmenv.ChainConfig().IsEIP1559(block.Number()) {
+				gp1559 = new(core.GasPool).AddGas(tx.Gas())
+			}
+			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas()), gp1559); err != nil {
 				return StorageRangeResult{}, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 			}
 			// Ensure any modifications are committed to the state

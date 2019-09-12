@@ -51,8 +51,19 @@ func newStatePrefetcher(config *params.ChainConfig, bc *BlockChain, engine conse
 func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, cfg vm.Config, interrupt *uint32) {
 	var (
 		header  = block.Header()
-		gaspool = new(GasPool).AddGas(block.GasLimit())
+		gaspool *GasPool
+		gp1559  *GasPool
 	)
+	// If EIP1559 is initialized then header.GasLimit is for the EIP1559 pool
+	// and the difference between the MaxGasEIP1559 and header.GasLimit is the limit for the legacy pool
+	// Once EIP1559 is finalized the header.GasLimit is the entire MaxGasEIP1559
+	// so no gas will be allocated to the legacy pool
+	if p.config.IsEIP1559(block.Number()) {
+		gaspool = new(GasPool).AddGas(p.config.EIP1559.MaxGas - block.GasLimit())
+		gp1559 = new(GasPool).AddGas(block.GasLimit())
+	} else { // If we are before EIP1559 activation then we use header.GasLimit for the legacy pool
+		gaspool = new(GasPool).AddGas(block.GasLimit())
+	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		// If block precaching was interrupted, abort
@@ -61,7 +72,7 @@ func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, c
 		}
 		// Block precaching permitted to continue, execute the transaction
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
-		if err := precacheTransaction(p.config, p.bc, nil, gaspool, statedb, header, tx, cfg); err != nil {
+		if err := precacheTransaction(p.config, p.bc, nil, gaspool, gp1559, statedb, header, tx, cfg); err != nil {
 			return // Ugh, something went horribly wrong, bail out
 		}
 	}
@@ -70,7 +81,7 @@ func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, c
 // precacheTransaction attempts to apply a transaction to the given state database
 // and uses the input parameters for its environment. The goal is not to execute
 // the transaction successfully, rather to warm up touched data slots.
-func precacheTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gaspool *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, cfg vm.Config) error {
+func precacheTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gaspool, gp1559 *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, cfg vm.Config) error {
 	// Convert the transaction into an executable message and pre-cache its sender
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
@@ -80,6 +91,6 @@ func precacheTransaction(config *params.ChainConfig, bc ChainContext, author *co
 	context := NewEVMContext(msg, header, bc, author)
 	vm := vm.NewEVM(context, statedb, config, cfg)
 
-	_, _, _, err = ApplyMessage(vm, msg, gaspool)
+	_, _, _, err = ApplyMessage(vm, msg, gaspool, gp1559)
 	return err
 }

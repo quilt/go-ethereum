@@ -139,6 +139,20 @@ func (b *SimulatedBackend) CodeAt(ctx context.Context, contract common.Address, 
 	return statedb.GetCode(contract), nil
 }
 
+// BaseFeeAt returns the BaseFee at the given block height.
+// If the blockNumber is nil the latest known BaseFee is returned.
+func (b *SimulatedBackend) BaseFeeAt(ctx context.Context, blockNumber *big.Int) (*big.Int, error) {
+	if blockNumber == nil || blockNumber.Cmp(b.pendingBlock.Number()) == 0 {
+		header := b.blockchain.CurrentHeader()
+		return header.BaseFee, nil
+	}
+	header, err := b.HeaderByNumber(ctx, blockNumber)
+	if err != nil {
+		return nil, err
+	}
+	return header.BaseFee, nil
+}
+
 // BalanceAt returns the wei balance of a certain account in the blockchain.
 func (b *SimulatedBackend) BalanceAt(ctx context.Context, contract common.Address, blockNumber *big.Int) (*big.Int, error) {
 	b.mu.Lock()
@@ -362,6 +376,16 @@ func (b *SimulatedBackend) SuggestGasPrice(ctx context.Context) (*big.Int, error
 	return big.NewInt(1), nil
 }
 
+// SuggestGasPremium, since the simulated chain doesn't have miners, we just return a GasPremium of 1 for any call
+func (b *SimulatedBackend) SuggestGasPremium(ctx context.Context) (*big.Int, error) {
+	return big.NewInt(1), nil
+}
+
+// SuggestFeeCap, since the simulated chain doesn't have miners, we just return a FeeCap of 1 for any call
+func (b *SimulatedBackend) SuggestFeeCap(ctx context.Context) (*big.Int, error) {
+	return big.NewInt(1), nil
+}
+
 // EstimateGas executes the requested code against the currently pending block/state and
 // returns the used amount of gas.
 func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMsg) (uint64, error) {
@@ -416,8 +440,29 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 // state is modified during execution, make sure to copy it if necessary.
 func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallMsg, block *types.Block, statedb *state.StateDB) ([]byte, uint64, bool, error) {
 	// Ensure message is initialized properly.
-	if call.GasPrice == nil {
+	// EIP1559 guards
+	// If we have finalized EIP1559 and do not have a properly formed EIP1559 trx, sub in default values
+	eip1559 := b.config.IsEIP1559(block.Number())
+	eip1559Finalized := b.config.IsEIP1559Finalized(block.Number())
+	if eip1559Finalized && (call.GasPremium == nil || call.FeeCap == nil || call.GasPrice != nil) {
+		call.GasPremium = big.NewInt(1)
+		call.FeeCap = big.NewInt(10)
+		call.GasPrice = nil
+	}
+	// If we have not activated EIP1559 and do not have a properly formed legacy trx, sub in default values
+	if !eip1559 && (call.GasPremium != nil || call.FeeCap != nil || call.GasPrice == nil) {
+		call.GasPremium = nil
+		call.FeeCap = nil
 		call.GasPrice = big.NewInt(1)
+	}
+	// If we are in between activation and finalization
+	if eip1559 && !eip1559Finalized {
+		// and we have neither a properly formed legacy or EIP1559 transaction, sub in default legacy values
+		if (call.GasPremium == nil || call.FeeCap == nil && call.GasPrice == nil) || (call.GasPremium != nil || call.FeeCap != nil && call.GasPrice != nil) {
+			call.GasPremium = nil
+			call.FeeCap = nil
+			call.GasPrice = big.NewInt(1)
+		}
 	}
 	if call.Gas == 0 {
 		call.Gas = 50000000
@@ -436,8 +481,12 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(evmContext, statedb, b.config, vm.Config{})
 	gaspool := new(core.GasPool).AddGas(math.MaxUint64)
+	var gp1559 *core.GasPool
+	if b.config.IsEIP1559(block.Number()) {
+		gp1559 = new(core.GasPool).AddGas(math.MaxUint64)
+	}
 
-	return core.NewStateTransition(vmenv, msg, gaspool).TransitionDb()
+	return core.NewStateTransition(vmenv, msg, gaspool, gp1559).TransitionDb()
 }
 
 // SendTransaction updates the pending block to include the given transaction.
@@ -445,6 +494,25 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transaction) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	// EIP1559 guards
+	eip1559 := b.config.IsEIP1559(b.pendingBlock.Number())
+	eip1559Finalized := b.config.IsEIP1559Finalized(b.pendingBlock.Number())
+	if eip1559 && b.pendingBlock.BaseFee() == nil {
+		return core.ErrNoBaseFee
+	}
+	if eip1559Finalized && (tx.GasPremium() == nil || tx.FeeCap() == nil || tx.GasPrice() != nil) {
+		return core.ErrTxNotEIP1559
+	}
+	if !eip1559 && (tx.GasPremium() != nil || tx.FeeCap() != nil || tx.GasPrice() == nil) {
+		return core.ErrTxIsEIP1559
+	}
+	if tx.GasPrice() != nil && (tx.GasPremium() != nil || tx.FeeCap() != nil) {
+		return core.ErrTxSetsLegacyAndEIP1559Fields
+	}
+	if tx.GasPrice() == nil && (tx.GasPremium() == nil || tx.FeeCap() == nil) {
+		return core.ErrMissingGasFields
+	}
 
 	sender, err := types.Sender(types.NewEIP155Signer(b.config.ChainID), tx)
 	if err != nil {
@@ -600,6 +668,8 @@ func (m callmsg) GasPrice() *big.Int   { return m.CallMsg.GasPrice }
 func (m callmsg) Gas() uint64          { return m.CallMsg.Gas }
 func (m callmsg) Value() *big.Int      { return m.CallMsg.Value }
 func (m callmsg) Data() []byte         { return m.CallMsg.Data }
+func (m callmsg) GasPremium() *big.Int { return m.CallMsg.GasPremium }
+func (m callmsg) FeeCap() *big.Int     { return m.CallMsg.FeeCap }
 
 // filterBackend implements filters.Backend to support filtering for logs without
 // taking bloom-bits acceleration structures into account.

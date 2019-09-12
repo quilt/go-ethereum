@@ -45,11 +45,15 @@ type Transaction struct {
 
 type txdata struct {
 	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
-	Price        *big.Int        `json:"gasPrice" gencodec:"required"`
+	Price        *big.Int        `json:"gasPrice" rlp:"nil"`
 	GasLimit     uint64          `json:"gas"      gencodec:"required"`
 	Recipient    *common.Address `json:"to"       rlp:"nil"` // nil means contract creation
 	Amount       *big.Int        `json:"value"    gencodec:"required"`
 	Payload      []byte          `json:"input"    gencodec:"required"`
+
+	// EIP1559 gas values
+	GasPremium *big.Int `json:"gasPremium" rlp:"nil"` // nil means legacy transaction
+	FeeCap     *big.Int `json:"feeCap"     rlp:"nil"` // nil means legacy transaction
 
 	// Signature values
 	V *big.Int `json:"v" gencodec:"required"`
@@ -66,20 +70,22 @@ type txdataMarshaling struct {
 	GasLimit     hexutil.Uint64
 	Amount       *hexutil.Big
 	Payload      hexutil.Bytes
+	GasPremium   *hexutil.Big
+	FeeCap       *hexutil.Big
 	V            *hexutil.Big
 	R            *hexutil.Big
 	S            *hexutil.Big
 }
 
-func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
-	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data)
+func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, gasPremium, feeCap *big.Int) *Transaction {
+	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data, gasPremium, feeCap)
 }
 
-func NewContractCreation(nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
-	return newTransaction(nonce, nil, amount, gasLimit, gasPrice, data)
+func NewContractCreation(nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, gasPremium, feeCap *big.Int) *Transaction {
+	return newTransaction(nonce, nil, amount, gasLimit, gasPrice, data, gasPremium, feeCap)
 }
 
-func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
+func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, gasPremium, feeCap *big.Int) *Transaction {
 	if len(data) > 0 {
 		data = common.CopyBytes(data)
 	}
@@ -89,7 +95,6 @@ func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit 
 		Payload:      data,
 		Amount:       new(big.Int),
 		GasLimit:     gasLimit,
-		Price:        new(big.Int),
 		V:            new(big.Int),
 		R:            new(big.Int),
 		S:            new(big.Int),
@@ -98,7 +103,19 @@ func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit 
 		d.Amount.Set(amount)
 	}
 	if gasPrice != nil {
-		d.Price.Set(gasPrice)
+		d.Price = gasPrice
+	}
+	if gasPremium != nil {
+		d.GasPremium = gasPremium
+	}
+	if feeCap != nil {
+		d.FeeCap = feeCap
+	}
+	if gasPremium != nil {
+		d.GasPremium = gasPremium
+	}
+	if feeCap != nil {
+		d.FeeCap = feeCap
 	}
 
 	return &Transaction{data: d}
@@ -125,18 +142,127 @@ func isProtectedV(V *big.Int) bool {
 
 // EncodeRLP implements rlp.Encoder
 func (tx *Transaction) EncodeRLP(w io.Writer) error {
+	if tx.data.FeeCap == nil || tx.data.GasPremium == nil {
+		return rlp.Encode(w, []interface{}{
+			tx.data.AccountNonce,
+			tx.data.Price,
+			tx.data.GasLimit,
+			tx.data.Recipient,
+			tx.data.Amount,
+			tx.data.Payload,
+			tx.data.V,
+			tx.data.R,
+			tx.data.S,
+		})
+	}
 	return rlp.Encode(w, &tx.data)
 }
 
 // DecodeRLP implements rlp.Decoder
-func (tx *Transaction) DecodeRLP(s *rlp.Stream) error {
-	_, size, _ := s.Kind()
-	err := s.Decode(&tx.data)
-	if err == nil {
-		tx.size.Store(common.StorageSize(rlp.ListSize(size)))
+func (tx *Transaction) DecodeRLP(stream *rlp.Stream) error {
+	size, err := stream.List()
+	if err != nil {
+		return err
 	}
-
-	return err
+	accountNonce := new(uint64)
+	if err = stream.Decode(accountNonce); err != nil {
+		return err
+	}
+	price := new(big.Int)
+	if err = stream.Decode(price); err != nil {
+		return err
+	}
+	gasLimit := new(uint64)
+	if err = stream.Decode(gasLimit); err != nil {
+		return err
+	}
+	_, recipientSize, err := stream.Kind()
+	if err != nil {
+		return err
+	}
+	var recipient *common.Address
+	// the below is to handle the "rlp: nil" tag (tag itself is not needed anymore because of this manual handling)
+	// attempting to unpack a zero value into *common.Address throws an error
+	// if there is a non-zero address, unpack it
+	if recipientSize != 0 {
+		recipient = new(common.Address)
+		if err = stream.Decode(recipient); err != nil {
+			return err
+		}
+	} else {
+		// otherwise if the value is of size zero throw away the value, move to next value in the stream, and leave recipient nil
+		if _, err = stream.Raw(); err != nil {
+			return err
+		}
+	}
+	amount := new(big.Int)
+	if err = stream.Decode(amount); err != nil {
+		return err
+	}
+	payload := new([]byte)
+	if err = stream.Decode(payload); err != nil {
+		return err
+	}
+	gasPremium := new(big.Int)
+	if err = stream.Decode(gasPremium); err != nil {
+		return err
+	}
+	feeCap := new(big.Int)
+	if err = stream.Decode(feeCap); err != nil {
+		return err
+	}
+	v := new(big.Int)
+	if err = stream.Decode(v); err != nil {
+		return err
+	}
+	// if this is the end of the list then we are decoding a legacy transaction
+	// so the decoded gasPremium, feeCap, and v values are shifted into the v, r, and s values
+	if err = stream.ListEnd(); err == nil {
+		tx.data = txdata{
+			AccountNonce: *accountNonce,
+			Price:        price,
+			GasLimit:     *gasLimit,
+			Recipient:    recipient,
+			Amount:       amount,
+			Payload:      *payload,
+			V:            gasPremium,
+			R:            feeCap,
+			S:            v,
+		}
+		tx.size.Store(common.StorageSize(rlp.ListSize(size)))
+		return nil
+	}
+	// if we are not at the end of the list, continue decoding the 1559 transaction fields
+	if err != rlp.ErrNotAtEOL {
+		return err
+	}
+	r := new(big.Int)
+	if err := stream.Decode(r); err != nil {
+		return err
+	}
+	s := new(big.Int)
+	if err := stream.Decode(s); err != nil {
+		return err
+	}
+	// we should now be at the end of the list for a EIP1559 transaction
+	if err = stream.ListEnd(); err != nil {
+		return err
+	}
+	tx.data = txdata{
+		AccountNonce: *accountNonce,
+		Price:        nil,
+		GasLimit:     *gasLimit,
+		Recipient:    recipient,
+		Amount:       amount,
+		Payload:      *payload,
+		GasPremium:   gasPremium,
+		FeeCap:       feeCap,
+		V:            v,
+		R:            r,
+		S:            s,
+	}
+	tx.size.Store(common.StorageSize(rlp.ListSize(size)))
+	return nil
 }
 
 // MarshalJSON encodes the web3 RPC transaction format.
@@ -172,12 +298,14 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 	return nil
 }
 
-func (tx *Transaction) Data() []byte       { return common.CopyBytes(tx.data.Payload) }
-func (tx *Transaction) Gas() uint64        { return tx.data.GasLimit }
-func (tx *Transaction) GasPrice() *big.Int { return new(big.Int).Set(tx.data.Price) }
-func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.data.Amount) }
-func (tx *Transaction) Nonce() uint64      { return tx.data.AccountNonce }
-func (tx *Transaction) CheckNonce() bool   { return true }
+func (tx *Transaction) Data() []byte         { return common.CopyBytes(tx.data.Payload) }
+func (tx *Transaction) Gas() uint64          { return tx.data.GasLimit }
+func (tx *Transaction) GasPrice() *big.Int   { return tx.data.Price }
+func (tx *Transaction) Value() *big.Int      { return new(big.Int).Set(tx.data.Amount) }
+func (tx *Transaction) Nonce() uint64        { return tx.data.AccountNonce }
+func (tx *Transaction) CheckNonce() bool     { return true }
+func (tx *Transaction) GasPremium() *big.Int { return tx.data.GasPremium }
+func (tx *Transaction) FeeCap() *big.Int     { return tx.data.FeeCap }
 
 // To returns the recipient address of the transaction.
 // It returns nil if the transaction is a contract creation.
@@ -221,11 +349,13 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 	msg := Message{
 		nonce:      tx.data.AccountNonce,
 		gasLimit:   tx.data.GasLimit,
-		gasPrice:   new(big.Int).Set(tx.data.Price),
+		gasPrice:   tx.data.Price,
 		to:         tx.data.Recipient,
 		amount:     tx.data.Amount,
 		data:       tx.data.Payload,
 		checkNonce: true,
+		gasPremium: tx.data.GasPremium,
+		feeCap:     tx.data.FeeCap,
 	}
 
 	var err error
@@ -246,10 +376,22 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 }
 
 // Cost returns amount + gasprice * gaslimit.
-func (tx *Transaction) Cost() *big.Int {
-	total := new(big.Int).Mul(tx.data.Price, new(big.Int).SetUint64(tx.data.GasLimit))
-	total.Add(total, tx.data.Amount)
-	return total
+func (tx *Transaction) Cost(baseFee *big.Int) *big.Int {
+	if tx.data.Price != nil {
+		total := new(big.Int).Mul(tx.data.Price, new(big.Int).SetUint64(tx.data.GasLimit))
+		total.Add(total, tx.data.Amount)
+		return total
+	}
+	if baseFee != nil && tx.data.GasPremium != nil && tx.data.FeeCap != nil {
+		eip1559GasPrice := new(big.Int).Add(baseFee, tx.data.GasPremium)
+		if eip1559GasPrice.Cmp(tx.data.FeeCap) > 0 {
+			eip1559GasPrice.Set(tx.data.FeeCap)
+		}
+		total := new(big.Int).Mul(eip1559GasPrice, new(big.Int).SetUint64(tx.data.GasLimit))
+		total.Add(total, tx.data.Amount)
+		return total
+	}
+	return nil
 }
 
 // RawSignatureValues returns the V, R, S signature values of the transaction.
@@ -302,21 +444,43 @@ func (s TxByNonce) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 // TxByPrice implements both the sort and the heap interface, making it useful
 // for all at once sorting as well as individually adding and removing elements.
-type TxByPrice Transactions
+type TxByPrice struct {
+	txs     Transactions
+	baseFee *big.Int
+}
 
-func (s TxByPrice) Len() int           { return len(s) }
-func (s TxByPrice) Less(i, j int) bool { return s[i].data.Price.Cmp(s[j].data.Price) > 0 }
-func (s TxByPrice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s TxByPrice) Len() int { return len(s.txs) }
+
+// Note that this returns true if j is less than i, as the ordering needs to be from highest price to lowest
+func (s TxByPrice) Less(i, j int) bool {
+	iPrice := s.txs[i].data.Price
+	jPrice := s.txs[j].data.Price
+	if iPrice == nil {
+		iPrice = new(big.Int).Add(s.baseFee, s.txs[i].data.GasPremium)
+		if iPrice.Cmp(s.txs[i].data.FeeCap) > 0 {
+			iPrice.Set(s.txs[i].data.FeeCap)
+		}
+	}
+	if jPrice == nil {
+		jPrice = new(big.Int).Add(s.baseFee, s.txs[j].data.GasPremium)
+		if jPrice.Cmp(s.txs[j].data.FeeCap) > 0 {
+			jPrice.Set(s.txs[j].data.FeeCap)
+		}
+	}
+	return iPrice.Cmp(jPrice) > 0
+}
+
+func (s *TxByPrice) Swap(i, j int) { s.txs[i], s.txs[j] = s.txs[j], s.txs[i] }
 
 func (s *TxByPrice) Push(x interface{}) {
-	*s = append(*s, x.(*Transaction))
+	s.txs = append(s.txs, x.(*Transaction))
 }
 
 func (s *TxByPrice) Pop() interface{} {
-	old := *s
+	old := s.txs
 	n := len(old)
 	x := old[n-1]
-	*s = old[0 : n-1]
+	s.txs = old[0 : n-1]
 	return x
 }
 
@@ -325,7 +489,7 @@ func (s *TxByPrice) Pop() interface{} {
 // entire batches of transactions for non-executable accounts.
 type TransactionsByPriceAndNonce struct {
 	txs    map[common.Address]Transactions // Per account nonce-sorted list of transactions
-	heads  TxByPrice                       // Next transaction for each unique account (price heap)
+	heads  *TxByPrice                      // Next transaction for each unique account (price heap)
 	signer Signer                          // Signer for the set of transactions
 }
 
@@ -334,11 +498,13 @@ type TransactionsByPriceAndNonce struct {
 //
 // Note, the input map is reowned so the caller should not interact any more with
 // if after providing it to the constructor.
-func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions) *TransactionsByPriceAndNonce {
+func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions, baseFee *big.Int) *TransactionsByPriceAndNonce {
 	// Initialize a price based heap with the head transactions
-	heads := make(TxByPrice, 0, len(txs))
+	heads := new(TxByPrice)
+	heads.txs = make(Transactions, 0, len(txs))
+	heads.baseFee = baseFee
 	for from, accTxs := range txs {
-		heads = append(heads, accTxs[0])
+		heads.txs = append(heads.txs, accTxs[0])
 		// Ensure the sender address is from the signer
 		acc, _ := Sender(signer, accTxs[0])
 		txs[acc] = accTxs[1:]
@@ -346,7 +512,7 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 			delete(txs, from)
 		}
 	}
-	heap.Init(&heads)
+	heap.Init(heads)
 
 	// Assemble and return the transaction set
 	return &TransactionsByPriceAndNonce{
@@ -358,20 +524,20 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 
 // Peek returns the next transaction by price.
 func (t *TransactionsByPriceAndNonce) Peek() *Transaction {
-	if len(t.heads) == 0 {
+	if len(t.heads.txs) == 0 {
 		return nil
 	}
-	return t.heads[0]
+	return t.heads.txs[0]
 }
 
 // Shift replaces the current best head with the next one from the same account.
 func (t *TransactionsByPriceAndNonce) Shift() {
-	acc, _ := Sender(t.signer, t.heads[0])
+	acc, _ := Sender(t.signer, t.heads.txs[0])
 	if txs, ok := t.txs[acc]; ok && len(txs) > 0 {
-		t.heads[0], t.txs[acc] = txs[0], txs[1:]
-		heap.Fix(&t.heads, 0)
+		t.heads.txs[0], t.txs[acc] = txs[0], txs[1:]
+		heap.Fix(t.heads, 0)
 	} else {
-		heap.Pop(&t.heads)
+		heap.Pop(t.heads)
 	}
 }
 
@@ -379,7 +545,7 @@ func (t *TransactionsByPriceAndNonce) Shift() {
 // the same account. This should be used when a transaction cannot be executed
 // and hence all subsequent ones should be discarded from the same account.
 func (t *TransactionsByPriceAndNonce) Pop() {
-	heap.Pop(&t.heads)
+	heap.Pop(t.heads)
 }
 
 // Message is a fully derived transaction and implements core.Message
@@ -394,9 +560,12 @@ type Message struct {
 	gasPrice   *big.Int
 	data       []byte
 	checkNonce bool
+	gasPremium *big.Int
+	feeCap     *big.Int
 }
 
-func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, checkNonce bool) Message {
+// NewMessage creates and returns a new message
+func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, checkNonce bool, gasPremium, feeCap *big.Int) Message {
 	return Message{
 		from:       from,
 		to:         to,
@@ -406,6 +575,8 @@ func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *b
 		gasPrice:   gasPrice,
 		data:       data,
 		checkNonce: checkNonce,
+		gasPremium: gasPremium,
+		feeCap:     feeCap,
 	}
 }
 
@@ -417,3 +588,5 @@ func (m Message) Gas() uint64          { return m.gasLimit }
 func (m Message) Nonce() uint64        { return m.nonce }
 func (m Message) Data() []byte         { return m.data }
 func (m Message) CheckNonce() bool     { return m.checkNonce }
+func (m Message) GasPremium() *big.Int { return m.gasPremium }
+func (m Message) FeeCap() *big.Int     { return m.feeCap }

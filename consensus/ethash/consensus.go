@@ -76,6 +76,7 @@ var (
 	errInvalidDifficulty = errors.New("non-positive difficulty")
 	errInvalidMixDigest  = errors.New("invalid mix digest")
 	errInvalidPoW        = errors.New("invalid proof-of-work")
+	errExceedGasLimit    = errors.New("transaction gas usage exceeds the per-transaction limit")
 )
 
 // Author implements consensus.Engine, returning the header's coinbase as the
@@ -167,6 +168,18 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*type
 		}
 	}()
 	return abort, errorsOut
+}
+
+// VerifyTransactions verifies that the transactions in a block do not exceed the per-transaction gas limit
+func (*Ethash) VerifyTransactions(chain consensus.ChainReader, block *types.Block) error {
+	if chain.Config().IsEIP1559(block.Number()) {
+		for _, tx := range block.Transactions() {
+			if tx.Gas() > params.PerTransactionGasLimit {
+				return errExceedGasLimit
+			}
+		}
+	}
+	return nil
 }
 
 func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainReader, headers []*types.Header, seals []bool, index int) error {
@@ -263,26 +276,34 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	if expected.Cmp(header.Difficulty) != 0 {
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
 	}
-	// Verify that the gas limit is <= 2^63-1
-	cap := uint64(0x7fffffffffffffff)
-	if header.GasLimit > cap {
-		return fmt.Errorf("invalid gasLimit: have %v, max %v", header.GasLimit, cap)
-	}
-	// Verify that the gasUsed is <= gasLimit
-	if header.GasUsed > header.GasLimit {
-		return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
+
+	// If EIP1559 is not active we need to verify that the GasLimit field is valid according to the legacy rules
+	if !chain.Config().IsEIP1559(header.Number) {
+		// Verify that the gas limit is <= 2^63-1
+		cap := uint64(0x7fffffffffffffff)
+		if header.GasLimit > cap {
+			return fmt.Errorf("invalid gasLimit: have %v, max %v", header.GasLimit, cap)
+		}
+		// Verify that the gasUsed is <= gasLimit
+		if header.GasUsed > header.GasLimit {
+			return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
+		}
+
+		// Verify that the gas limit remains within allowed bounds
+		diff := int64(parent.GasLimit) - int64(header.GasLimit)
+		if diff < 0 {
+			diff *= -1
+		}
+		limit := parent.GasLimit / params.GasLimitBoundDivisor
+
+		if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
+			return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+		}
+		// If EIP1559 is active, assert that the GasLimit field is valid according to the EIP1559 rules
+	} else if err := misc.VerifyEIP1559GasLimit(chain.Config(), header); err != nil {
+		return err
 	}
 
-	// Verify that the gas limit remains within allowed bounds
-	diff := int64(parent.GasLimit) - int64(header.GasLimit)
-	if diff < 0 {
-		diff *= -1
-	}
-	limit := parent.GasLimit / params.GasLimitBoundDivisor
-
-	if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
-		return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
-	}
 	// Verify that the block number is parent's +1
 	if diff := new(big.Int).Sub(header.Number, parent.Number); diff.Cmp(big.NewInt(1)) != 0 {
 		return consensus.ErrInvalidNumber
@@ -294,6 +315,9 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		}
 	}
 	// If all checks passed, validate any special fields for hard forks
+	if err := misc.VerifyEIP1559BaseFee(chain.Config(), header, parent); err != nil {
+		return err
+	}
 	if err := misc.VerifyDAOHeaderExtraData(chain.Config(), header); err != nil {
 		return err
 	}
@@ -589,8 +613,7 @@ func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainReader, header *t
 // SealHash returns the hash of a block prior to it being sealed.
 func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 	hasher := sha3.NewLegacyKeccak256()
-
-	rlp.Encode(hasher, []interface{}{
+	encodedHeader := []interface{}{
 		header.ParentHash,
 		header.UncleHash,
 		header.Coinbase,
@@ -604,7 +627,12 @@ func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 		header.GasUsed,
 		header.Time,
 		header.Extra,
-	})
+	}
+	if header.BaseFee != nil {
+		encodedHeader = append(encodedHeader, header.BaseFee)
+	}
+	rlp.Encode(hasher, encodedHeader)
+
 	hasher.Sum(hash[:0])
 	return hash
 }

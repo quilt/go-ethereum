@@ -135,6 +135,9 @@ var (
 	// errRecentlySigned is returned if a header is signed by an authorized entity
 	// that already signed a header recently, thus is temporarily not allowed to.
 	errRecentlySigned = errors.New("recently signed")
+
+	// errExceedGasLimit is returned if a transaction uses more gas than the allowed per-tx limit
+	errExceedGasLimit = errors.New("transaction gas usage exceeds the per-transaction limit")
 )
 
 // SignerFn is a signer callback function to request a header to be signed by a
@@ -299,6 +302,18 @@ func (c *Clique) verifyHeader(chain consensus.ChainReader, header *types.Header,
 	}
 	// All basic checks passed, verify cascading fields
 	return c.verifyCascadingFields(chain, header, parents)
+}
+
+// VerifyTransactions verifies that the transactions in a block do not exceed the per-transaction gas limit
+func (*Clique) VerifyTransactions(chain consensus.ChainReader, block *types.Block) error {
+	if chain.Config().IsEIP1559(block.Number()) {
+		for _, tx := range block.Transactions() {
+			if tx.Gas() > params.PerTransactionGasLimit {
+				return errExceedGasLimit
+			}
+		}
+	}
+	return nil
 }
 
 // verifyCascadingFields verifies all the header fields that are not standalone,
@@ -715,7 +730,7 @@ func CliqueRLP(header *types.Header) []byte {
 }
 
 func encodeSigHeader(w io.Writer, header *types.Header) {
-	err := rlp.Encode(w, []interface{}{
+	headerFields := []interface{}{
 		header.ParentHash,
 		header.UncleHash,
 		header.Coinbase,
@@ -731,8 +746,11 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 		header.Extra[:len(header.Extra)-crypto.SignatureLength], // Yes, this will panic if extra is too short
 		header.MixDigest,
 		header.Nonce,
-	})
-	if err != nil {
+	}
+	if header.BaseFee != nil {
+		headerFields = append(headerFields, header.BaseFee)
+	}
+	if err := rlp.Encode(w, headerFields); err != nil {
 		panic("can't encode: " + err.Error())
 	}
 }
