@@ -545,10 +545,14 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 	evmContext := core.NewEVMContext(msg, block.Header(), b.blockchain, nil)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	vmEnv := vm.NewEVM(evmContext, stateDB, b.config, vm.Config{})
-	gasPool := new(core.GasPool).AddGas(math.MaxUint64)
+	vmenv := vm.NewEVM(evmContext, statedb, b.config, vm.Config{})
+	gaspool := new(core.GasPool).AddGas(math.MaxUint64)
+	var gp1559 *core.GasPool
+	if b.config.IsEIP1559(block.Number()) {
+		gp1559 = new(core.GasPool).AddGas(params.MaxGasEIP1559)
+	}
 
-	return core.NewStateTransition(vmEnv, msg, gasPool).TransitionDb()
+	return core.NewStateTransition(vmenv, msg, gaspool, gp1559).TransitionDb()
 }
 
 // SendTransaction updates the pending block to include the given transaction.
