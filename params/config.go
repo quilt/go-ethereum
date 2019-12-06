@@ -67,9 +67,9 @@ var (
 		ConstantinopleBlock:   big.NewInt(7280000),
 		PetersburgBlock:       big.NewInt(7280000),
 		IstanbulBlock:         big.NewInt(9069000),
-		EWASMBlock:            nil,
 		EIP1559Block:          nil,
 		EIP1559FinalizedBlock: nil,
+		EWASMBlock:            nil,
 		Ethash:                new(EthashConfig),
 	}
 
@@ -111,6 +111,7 @@ var (
 		MuirGlacierBlock:      big.NewInt(7117117),
 		EIP1559Block:          nil,
 		EIP1559FinalizedBlock: nil,
+		EWASMBlock:            nil,
 		Ethash:                new(EthashConfig),
 	}
 
@@ -152,6 +153,7 @@ var (
 		MuirGlacierBlock:      nil,
 		EIP1559Block:          nil,
 		EIP1559FinalizedBlock: nil,
+		EWASMBlock:            nil,
 		Clique: &CliqueConfig{
 			Period: 15,
 			Epoch:  30000,
@@ -194,6 +196,7 @@ var (
 		MuirGlacierBlock:      nil,
 		EIP1559Block:          nil,
 		EIP1559FinalizedBlock: nil,
+		EWASMBlock:            nil,
 		Clique: &CliqueConfig{
 			Period: 15,
 			Epoch:  30000,
