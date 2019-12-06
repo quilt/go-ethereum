@@ -68,7 +68,6 @@ var (
 		PetersburgBlock:       big.NewInt(7280000),
 		IstanbulBlock:         big.NewInt(9069000),
 		MuirGlacierBlock:      big.NewInt(9200000),
-		EWASMBlock:            nil,
 		EIP1559Block:          nil,
 		EIP1559FinalizedBlock: nil,
 		Ethash:                new(EthashConfig),
@@ -577,16 +576,13 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 		return newCompatError("YOLOv1 fork block", c.YoloV1Block, newcfg.YoloV1Block)
 	}
 	if isForkIncompatible(c.EWASMBlock, newcfg.EWASMBlock, head) {
-		return newCompatError("EWASM fork block", c.EWASMBlock, newcfg.EWASMBlock)
+		return newCompatError("ewasm fork block", c.EWASMBlock, newcfg.EWASMBlock)
 	}
 	if isForkIncompatible(c.EIP1559Block, newcfg.EIP1559Block, head) {
 		return newCompatError("EIP1559 fork block", c.EIP1559Block, newcfg.EIP1559Block)
 	}
 	if isForkIncompatible(c.EIP1559FinalizedBlock, newcfg.EIP1559FinalizedBlock, head) {
 		return newCompatError("EIP1559Finalized fork block", c.EIP1559FinalizedBlock, newcfg.EIP1559FinalizedBlock)
-	}
-	if isForkIncompatible(c.EWASMBlock, newcfg.EWASMBlock, head) {
-		return newCompatError("EWASM fork block", c.EWASMBlock, newcfg.EWASMBlock)
 	}
 	if isForkIncompatible(c.EIP1559Block, newcfg.EIP1559Block, head) {
 		return newCompatError("EIP1559 fork block", c.EIP1559Block, newcfg.EIP1559Block)
