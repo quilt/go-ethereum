@@ -612,7 +612,7 @@ func (l *txPricedList) Discard(slots int, local *accountSet) types.Transactions 
 		// little check to avoid unpacking / repacking the heap later on, which
 		// is very expensive
 		discardable := 0
-		for _, tx := range *l.items {
+		for _, tx := range l.items.txs {
 			if !local.containsTx(tx) {
 				discardable++
 			}
@@ -627,8 +627,8 @@ func (l *txPricedList) Discard(slots int, local *accountSet) types.Transactions 
 	if slots == 0 {
 		return nil
 	}
-	drop := make(types.Transactions, 0, slots)               // Remote underpriced transactions to drop
-	save := make(types.Transactions, 0, len(*l.items)-slots) // Local underpriced transactions to keep
+	drop := make(types.Transactions, 0, slots)                  // Remote underpriced transactions to drop
+	save := make(types.Transactions, 0, len(l.items.txs)-slots) // Local underpriced transactions to keep
 
 	for len(l.items.txs) > 0 && slots > 0 {
 		// Discard stale transactions if found during cleanup

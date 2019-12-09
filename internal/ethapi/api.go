@@ -825,19 +825,19 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 
 	// EIP1559 guards
 	if b.ChainConfig().IsEIP1559Finalized(b.CurrentBlock().Number()) && (args.GasPremium == nil || args.FeeCap == nil || args.GasPrice != nil) {
-		return nil, 0, false, core.ErrTxNotEIP1559
+		return nil, core.ErrTxNotEIP1559
 	}
 	if !b.ChainConfig().IsEIP1559(b.CurrentBlock().Number()) && (args.GasPremium != nil || args.FeeCap != nil || args.GasPrice == nil) {
-		return nil, 0, false, core.ErrTxIsEIP1559
+		return nil, core.ErrTxIsEIP1559
 	}
 	if args.GasPrice != nil && (args.GasPremium != nil || args.FeeCap != nil) {
-		return nil, 0, false, core.ErrTxSetsLegacyAndEIP1559Fields
+		return nil, core.ErrTxSetsLegacyAndEIP1559Fields
 	}
 	if args.FeeCap != nil && args.GasPremium == nil {
-		return nil, 0, false, errors.New("if FeeCap is set, GasPremium must be set")
+		return nil, errors.New("if FeeCap is set, GasPremium must be set")
 	}
 	if args.GasPremium != nil && args.FeeCap == nil {
-		return nil, 0, false, errors.New("if GasPremium is set, FeeCap must be set")
+		return nil, errors.New("if GasPremium is set, FeeCap must be set")
 	}
 
 	state, header, err := b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)

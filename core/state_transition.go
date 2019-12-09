@@ -335,12 +335,16 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			coinbaseBal := st.state.GetBalance(st.evm.Coinbase)
 			postBalance := new(big.Int).Add(coinbaseBal, coinBaseCredit)
 			if postBalance.Sign() < 0 {
-				return nil, 0, vmerr != nil, errInsufficientCoinbaseBalance
+				return nil, errInsufficientCoinbaseBalance
 			}
 		}
 		st.state.AddBalance(st.evm.Coinbase, coinBaseCredit)
 
-		return ret, st.gasUsed(), vmerr != nil, err
+		return &ExecutionResult{
+			UsedGas:    st.gasUsed(),
+			Err:        vmerr,
+			ReturnData: ret,
+		}, nil
 	}
 	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
