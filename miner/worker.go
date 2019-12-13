@@ -767,7 +767,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		}
 		if w.current.gp1559 == nil {
 			eip1559GasLimit = w.current.header.GasLimit
-			w.current.gasPool = new(core.GasPool).AddGas(eip1559GasLimit)
+			w.current.gp1559 = new(core.GasPool).AddGas(eip1559GasLimit)
 		}
 	} else if w.current.gasPool == nil { // If we are before EIP1559 activation then we use header.GasLimit for the legacy pool
 		legacyGasLimit = w.current.header.GasLimit
