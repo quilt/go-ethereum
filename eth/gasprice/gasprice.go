@@ -24,7 +24,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -36,33 +35,46 @@ var (
 	maxFeeCap  = big.NewInt(1000 * params.GWei)
 )
 
+const sampleNumber = 3 // Number of transactions sampled in a block
+
+var DefaultMaxPrice = big.NewInt(500 * params.GWei)
+
 type Config struct {
 	Blocks            int
 	Percentile        int
 	DefaultGasPrice   *big.Int `toml:",omitempty"`
 	DefaultGasPremium *big.Int `toml:",omitempty"`
 	DefaultFeeCap     *big.Int `toml:",omitempty"`
+	MaxPrice          *big.Int `toml:",omitempty"`
+}
+
+// OracleBackend includes all necessary background APIs for oracle.
+type OracleBackend interface {
+	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
+	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error)
+	ChainConfig() *params.ChainConfig
 }
 
 // Oracle recommends gas prices based on the content of recent
 // blocks. Suitable for both light and full clients.
-type OracleBackend struct {
-	backend     ethapi.Backend
+type Oracle struct {
+	backend     OracleBackend
 	lastHead    common.Hash
 	lastPrice   *big.Int
 	lastPremium *big.Int
 	lastCap     *big.Int
 	lastBaseFee *big.Int
+	maxPrice    *big.Int
 	cacheLock   sync.RWMutex
 	fetchLock   sync.Mutex
 
-	checkBlocks int
-	percentile  int
+	checkBlocks, maxEmpty, maxBlocks int
+	percentile                       int
 }
 
 // NewOracle returns a new gasprice oracle which can recommend suitable
 // gasprice for newly created transaction.
-func NewOracle(backend OracleBackend, params Config) *OracleBackend {
+func NewOracle(backend OracleBackend, params Config) *Oracle {
 	blocks := params.Blocks
 	if blocks < 1 {
 		blocks = 1
@@ -82,19 +94,22 @@ func NewOracle(backend OracleBackend, params Config) *OracleBackend {
 		maxPrice = DefaultMaxPrice
 		log.Warn("Sanitizing invalid gasprice oracle price cap", "provided", params.MaxPrice, "updated", maxPrice)
 	}
-	return &OracleBackend{
+	return &Oracle{
 		backend:     backend,
 		lastPrice:   params.DefaultGasPrice,
 		lastPremium: params.DefaultGasPremium,
 		lastCap:     params.DefaultFeeCap,
+		maxPrice:    maxPrice,
 		checkBlocks: blocks,
+		maxEmpty:    blocks / 2,
+		maxBlocks:   blocks * 5,
 		percentile:  percent,
 	}
 }
 
 // SuggestPrice returns a gasprice so that newly created transaction can
 // have a very high chance to be included in the following blocks.
-func (gpo *OracleBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
+func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	head, _ := gpo.backend.HeaderByNumber(ctx, rpc.LatestBlockNumber)
 	headHash := head.Hash()
 
@@ -169,7 +184,7 @@ func (gpo *OracleBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
 }
 
 // SuggestPremium returns the recommended gas premium.
-func (gpo *OracleBackend) SuggestPremium(ctx context.Context) (*big.Int, error) {
+func (gpo *Oracle) SuggestPremium(ctx context.Context) (*big.Int, error) {
 	gpo.cacheLock.RLock()
 	lastHead := gpo.lastHead
 	lastPremium := gpo.lastPremium
@@ -243,7 +258,7 @@ func (gpo *OracleBackend) SuggestPremium(ctx context.Context) (*big.Int, error) 
 }
 
 // SuggestCap returns the recommended fee cap.
-func (gpo *OracleBackend) SuggestCap(ctx context.Context) (*big.Int, error) {
+func (gpo *Oracle) SuggestCap(ctx context.Context) (*big.Int, error) {
 	gpo.cacheLock.RLock()
 	lastHead := gpo.lastHead
 	lastCap := gpo.lastCap
@@ -383,7 +398,7 @@ func (t transactionsByFeeCap) Less(i, j int) bool {
 // and sends it to the result channel. If the block is empty or all transactions
 // are sent by the miner itself(it doesn't make any sense to include this kind of
 // transaction prices for sampling), nil gasprice is returned.
-func (gpo *OracleBackend) getBlockPrices(ctx context.Context, signer types.Signer, blockNum uint64, limit int, result chan getBlockPricesResult, quit chan struct{}) {
+func (gpo *Oracle) getBlockPrices(ctx context.Context, signer types.Signer, blockNum uint64, limit int, result chan getBlockPricesResult, quit chan struct{}) {
 	block, err := gpo.backend.BlockByNumber(ctx, rpc.BlockNumber(blockNum))
 	if block == nil {
 		select {
@@ -415,7 +430,7 @@ func (gpo *OracleBackend) getBlockPrices(ctx context.Context, signer types.Signe
 
 // getBlockPremiums calculates the lowest transaction gas premium in a given block
 // and sends it to the result channel. If the block is empty, price is nil.
-func (gpo *OracleBackend) getBlockPremiums(ctx context.Context, signer types.Signer, blockNum uint64, ch chan getBlockPremiumsResult) {
+func (gpo *Oracle) getBlockPremiums(ctx context.Context, signer types.Signer, blockNum uint64, ch chan getBlockPremiumsResult) {
 	block, err := gpo.backend.BlockByNumber(ctx, rpc.BlockNumber(blockNum))
 	if block == nil {
 		ch <- getBlockPremiumsResult{nil, err}
@@ -439,7 +454,7 @@ func (gpo *OracleBackend) getBlockPremiums(ctx context.Context, signer types.Sig
 
 // getBlockCaps calculates the lowest transaction fee cap in a given block
 // and sends it to the result channel. If the block is empty, price is nil.
-func (gpo *OracleBackend) getBlockCaps(ctx context.Context, signer types.Signer, blockNum uint64, ch chan getBlockCapsResult) {
+func (gpo *Oracle) getBlockCaps(ctx context.Context, signer types.Signer, blockNum uint64, ch chan getBlockCapsResult) {
 	block, err := gpo.backend.BlockByNumber(ctx, rpc.BlockNumber(blockNum))
 	if block == nil {
 		ch <- getBlockCapsResult{nil, err}
