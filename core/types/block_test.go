@@ -19,7 +19,6 @@ package types
 import (
 	"bytes"
 	"hash"
-
 	"math/big"
 	"reflect"
 	"testing"
