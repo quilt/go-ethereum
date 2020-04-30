@@ -3813,7 +3813,7 @@ func TestTransactionPoolUnderpricingEIP1559(t *testing.T) {
 			t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 1)
 		}
 	}
-	ltx = eip1559Transaction(0, 100000, keys[3], big.NewInt(0), big.NewInt(0))
+	ltx = eip1559Transaction(0, 100000, keys[3], big.NewInt(0), big.NewInt(1))
 	if err := pool.AddLocal(ltx); err != nil {
 		t.Fatalf("failed to add new underpriced local transaction: %v", err)
 	}
@@ -4010,7 +4010,7 @@ func TestTransactionPoolUnderpricingEIP1559Finalized(t *testing.T) {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
 	// Ensure that adding local transactions can push out even higher priced ones
-	ltx = eip1559Transaction(1, 100000, keys[2], big.NewInt(0), big.NewInt(0))
+	ltx = eip1559Transaction(1, 100000, keys[2], big.NewInt(0), big.NewInt(1))
 	if err := pool.AddLocal(ltx); err != nil {
 		t.Fatalf("failed to append underpriced local transaction: %v", err)
 	}
