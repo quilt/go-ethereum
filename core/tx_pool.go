@@ -111,8 +111,11 @@ var (
 	localGauge   = metrics.NewRegisteredGauge("txpool/local", nil)
 	slotsGauge   = metrics.NewRegisteredGauge("txpool/slots", nil)
 
-	reorgTimer = metrics.NewRegisteredTimer("txpool/reorg", nil)
-	reorgGauge = metrics.NewRegisteredGauge("txpool/pending", nil)
+	reorgMeter             = metrics.NewRegisteredMeter("txpool/reorg", nil)
+	reorgAccountsMeter     = metrics.NewRegisteredMeter("txpool/reorg/accounts", nil)
+	reorgTransactionsMeter = metrics.NewRegisteredMeter("txpool/reorg/transactions", nil)
+	reorgTimer             = metrics.NewRegisteredTimer("txpool/reorg/execution", nil)
+	reorgResetTimer        = metrics.NewRegisteredTimer("txpool/reorg/reset_execution", nil)
 )
 
 // TxStatus is the current status of a transaction as seen by the pool.
@@ -1042,6 +1045,9 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		// the flatten operation can be avoided.
 		promoteAddrs = dirtyAccounts.flatten()
 	}
+
+	reorgAccountsMeter.Mark(int64(len(promoteAddrs)))
+
 	pool.mu.Lock()
 	if reset != nil {
 		// Reset from the old head to the new, rescheduling any reorged transactions
@@ -1079,13 +1085,18 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		pool.pendingNonces.set(addr, highestPending.Nonce()+1)
 	}
 
-	reorgTimer.UpdateSince(start)
-	reorgGauge.Inc(1)
+	reorgMeter.Mark(1)
+	if reset != nil {
+		reorgResetTimer.UpdateSince(start)
+	} else {
+		reorgTimer.UpdateSince(start)
+	}
 
 	pool.mu.Unlock()
 
 	// Notify subsystems for newly added transactions
 	for _, tx := range promoted {
+		reorgTransactionsMeter.Mark(1)
 		addr, _ := types.Sender(pool.signer, tx)
 		if _, ok := events[addr]; !ok {
 			events[addr] = newTxSortedMap()
