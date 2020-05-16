@@ -112,6 +112,7 @@ var (
 	slotsGauge   = metrics.NewRegisteredGauge("txpool/slots", nil)
 
 	reorgTimer = metrics.NewRegisteredTimer("txpool/reorg", nil)
+	reorgGauge = metrics.NewRegisteredGauge("txpool/pending", nil)
 )
 
 // TxStatus is the current status of a transaction as seen by the pool.
@@ -1079,6 +1080,8 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 	}
 
 	reorgTimer.UpdateSince(start)
+	reorgGauge.Inc(1)
+
 	pool.mu.Unlock()
 
 	// Notify subsystems for newly added transactions
