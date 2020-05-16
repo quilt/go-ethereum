@@ -116,6 +116,10 @@ var (
 	reorgTransactionsMeter = metrics.NewRegisteredMeter("txpool/reorg/transactions", nil)
 	reorgTimer             = metrics.NewRegisteredTimer("txpool/reorg/execution", nil)
 	reorgResetTimer        = metrics.NewRegisteredTimer("txpool/reorg/reset_execution", nil)
+
+	validationMeter        = metrics.NewRegisteredMeter("txpool/validation", nil)
+	validationTimer        = metrics.NewRegisteredTimer("txpool/validation/execution", nil)
+	successValidationTimer = metrics.NewRegisteredTimer("txpool/validation_success/execution", nil)
 )
 
 // TxStatus is the current status of a transaction as seen by the pool.
@@ -523,46 +527,60 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 // validateTx checks whether a transaction is valid according to the consensus
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
+	var start = time.Now()
+	validationMeter.Mark(1)
 	// Reject transactions over defined size to prevent DOS attacks
 	if uint64(tx.Size()) > txMaxSize {
+		validationTimer.UpdateSince(start)
 		return ErrOversizedData
 	}
 	// Transactions can't be negative. This may never happen using RLP decoded
 	// transactions but may occur if you create a transaction using the RPC.
 	if tx.Value().Sign() < 0 {
+		validationTimer.UpdateSince(start)
 		return ErrNegativeValue
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
 	if pool.currentMaxGas < tx.Gas() {
+		validationTimer.UpdateSince(start)
 		return ErrGasLimit
 	}
 	// Make sure the transaction is signed properly
 	from, err := types.Sender(pool.signer, tx)
 	if err != nil {
+		validationTimer.UpdateSince(start)
 		return ErrInvalidSender
 	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
 	if !local && tx.GasPriceIntCmp(pool.gasPrice) < 0 {
+		validationTimer.UpdateSince(start)
 		return ErrUnderpriced
 	}
 	// Ensure the transaction adheres to nonce ordering
 	if pool.currentState.GetNonce(from) > tx.Nonce() {
+		validationTimer.UpdateSince(start)
 		return ErrNonceTooLow
 	}
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
 	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+		validationTimer.UpdateSince(start)
 		return ErrInsufficientFunds
 	}
 	// Ensure the transaction has more gas than the basic tx fee.
 	intrGas, err := IntrinsicGas(tx.Data(), tx.To() == nil, true, pool.istanbul)
 	if err != nil {
+		validationTimer.UpdateSince(start)
 		return err
 	}
 	if tx.Gas() < intrGas {
+		validationTimer.UpdateSince(start)
 		return ErrIntrinsicGas
 	}
+
+	validationTimer.UpdateSince(start)
+	successValidationTimer.UpdateSince(start)
 	return nil
 }
 
@@ -1046,8 +1064,6 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		promoteAddrs = dirtyAccounts.flatten()
 	}
 
-	reorgAccountsMeter.Mark(int64(len(promoteAddrs)))
-
 	pool.mu.Lock()
 	if reset != nil {
 		// Reset from the old head to the new, rescheduling any reorged transactions
@@ -1066,6 +1082,8 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 			promoteAddrs = append(promoteAddrs, addr)
 		}
 	}
+
+	reorgAccountsMeter.Mark(int64(len(promoteAddrs)))
 	// Check for pending transactions for every account that sent new ones
 	promoted := pool.promoteExecutables(promoteAddrs)
 
