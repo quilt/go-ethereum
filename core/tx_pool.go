@@ -1230,6 +1230,19 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 		}
 	}
 
+	// Initialize the internal state to the current head
+	if newHead == nil {
+		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
+	}
+	statedb, err := pool.chain.StateAt(newHead.Root)
+	if err != nil {
+		log.Error("Failed to reset txpool state", "err", err)
+		return
+	}
+	pool.currentState = statedb
+	pool.pendingNonces = newTxNoncer(statedb)
+	pool.currentMaxGas = newHead.GasLimit
+
 	// for AA we need to re-validate accounts that were included
 	// split into separate function
 	// This introduces some basic race conditions, so this needs to be refactored
@@ -1255,19 +1268,6 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 			}
 		}
 	}
-
-	// Initialize the internal state to the current head
-	if newHead == nil {
-		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
-	}
-	statedb, err := pool.chain.StateAt(newHead.Root)
-	if err != nil {
-		log.Error("Failed to reset txpool state", "err", err)
-		return
-	}
-	pool.currentState = statedb
-	pool.pendingNonces = newTxNoncer(statedb)
-	pool.currentMaxGas = newHead.GasLimit
 
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
