@@ -442,7 +442,7 @@ type Message struct {
 	isAA       bool
 }
 
-var AAEntryMessage = Message{from: common.NewEntryPointAddress(), gasPrice: big.NewInt(0)}
+var AAEntryMessage = Message{from: common.NewEntryPointAddress(), gasPrice: big.NewInt(0), isAA: true}
 
 func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, checkNonce bool) Message {
 	isAA := from.IsEntryPoint()
