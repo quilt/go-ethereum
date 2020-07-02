@@ -86,8 +86,10 @@ type Context struct {
 	GetHash GetHashFunc
 
 	// Message information
-	Origin   common.Address // Provides information for ORIGIN
-	GasPrice *big.Int       // Provides information for GASPRICE
+	Origin     common.Address // Provides information for ORIGIN
+	GasPrice   *big.Int       // Provides information for GASPRICE
+	PaygasMode PaygasMode     // Controls the behavior of PAYGAS
+	TxGasLimit uint64         // The transaction gas limit, used by PAYGAS
 
 	// Block information
 	Coinbase    common.Address // Provides information for COINBASE
