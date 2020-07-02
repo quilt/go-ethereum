@@ -66,7 +66,7 @@ func testValidate(blockchain *BlockChain, statedb *state.StateDB, transaction *t
 	var (
 		snapshotRevisionId = statedb.Snapshot()
 		context            = NewEVMContext(types.AAEntryMessage, blockchain.CurrentHeader(), blockchain, &common.Address{})
-		vmenv              = vm.NewEVM(context, statedb, blockchain.Config(), vm.Config{PaygasMode: vm.PaygasHalt})
+		vmenv              = vm.NewEVM(context, statedb, blockchain.Config(), vm.Config{})
 		err                = Validate(transaction, types.HomesteadSigner{}, vmenv, validationGasLimit)
 	)
 	if err != expectedErr {
@@ -138,7 +138,10 @@ func TestInvalidEVMConfig(t *testing.T) {
 		statedb, _ = blockchain.State()
 
 		context = NewEVMContext(types.AAEntryMessage, blockchain.CurrentHeader(), blockchain, &common.Address{})
-		vmenv   = vm.NewEVM(context, statedb, blockchain.Config(), vm.Config{})
+	)
+	context.PaygasMode = vm.PaygasNoOp
+	var (
+		vmenv = vm.NewEVM(context, statedb, blockchain.Config(), vm.Config{})
 
 		tx          = &types.Transaction{}
 		err         = Validate(tx, types.HomesteadSigner{}, vmenv, 400000)
@@ -155,7 +158,7 @@ func TestMalformedTransaction(t *testing.T) {
 		statedb, _ = blockchain.State()
 
 		context = NewEVMContext(types.AAEntryMessage, blockchain.CurrentHeader(), blockchain, &common.Address{})
-		vmenv   = vm.NewEVM(context, statedb, blockchain.Config(), vm.Config{PaygasMode: vm.PaygasHalt})
+		vmenv   = vm.NewEVM(context, statedb, blockchain.Config(), vm.Config{})
 
 		key, _      = crypto.GenerateKey()
 		tx          = pricedTransaction(0, 100000, big.NewInt(0), key)
