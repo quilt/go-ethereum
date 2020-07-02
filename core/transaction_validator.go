@@ -29,10 +29,10 @@ var (
 )
 
 func Validate(tx *types.Transaction, s types.Signer, evm *vm.EVM, gasLimit uint64) error {
-	if evm.PaygasMode() != vm.PaygasHalt {
+	if evm.PaygasMode != vm.PaygasHalt {
 		return ErrIncorrectAAConfig
 	}
-	evm.SetPaygasLimit(tx.Gas())
+	evm.TxGasLimit = tx.Gas()
 	if gasLimit > tx.Gas() {
 		gasLimit = tx.Gas()
 	}
@@ -48,6 +48,6 @@ func Validate(tx *types.Transaction, s types.Signer, evm *vm.EVM, gasLimit uint6
 	if err != nil {
 		return err
 	}
-	tx.SetAAGasPrice(evm.PaygasPrice())
+	tx.SetAAGasPrice(evm.GasPrice)
 	return nil
 }
