@@ -65,9 +65,7 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 				}(evm.interpreter)
 				evm.interpreter = interpreter
 			}
-			interpreter.SetAAConfig(evm.vmConfig.PaygasMode, evm.vmConfig.paygasPrice, evm.vmConfig.paygasLimit)
 			res, err := interpreter.Run(contract, input, readOnly)
-			evm.vmConfig.PaygasMode, evm.vmConfig.paygasPrice = interpreter.GetAAConfig()
 			return res, err
 		}
 	}
@@ -511,9 +509,3 @@ func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *
 
 // ChainConfig returns the environment's chain configuration
 func (evm *EVM) ChainConfig() *params.ChainConfig { return evm.chainConfig }
-
-func (evm *EVM) PaygasMode() PaygasMode              { return evm.vmConfig.PaygasMode }
-func (evm *EVM) SetPaygasMode(paygasMode PaygasMode) { evm.vmConfig.PaygasMode = paygasMode }
-func (evm *EVM) PaygasLimit() uint64                 { return evm.vmConfig.paygasLimit }
-func (evm *EVM) SetPaygasLimit(paygasLimit uint64)   { evm.vmConfig.paygasLimit = paygasLimit }
-func (evm *EVM) PaygasPrice() *big.Int               { return evm.vmConfig.paygasPrice }
