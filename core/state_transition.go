@@ -255,9 +255,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		if st.evm.PaygasMode == vm.PaygasNoOp {
 			st.evm.PaygasMode = vm.PaygasContinue
 		}
-		if st.evm.TxGasLimit == 0 {
-			st.evm.TxGasLimit = st.msg.Gas()
-		}
 	}
 
 	// Check clauses 1-3, buy gas if everything is correct
