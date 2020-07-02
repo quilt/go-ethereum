@@ -164,6 +164,7 @@ func newByzantiumInstructionSet() JumpTable {
 		memorySize:  memoryStaticCall,
 		valid:       true,
 		returns:     true,
+		internal:    true,
 	}
 	instructionSet[RETURNDATASIZE] = operation{
 		execute:     opReturnDataSize,

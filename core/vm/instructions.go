@@ -830,6 +830,15 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx)
 	// Pop other call parameters.
 	addr, inOffset, inSize, retOffset, retSize := callContext.stack.pop(), callContext.stack.pop(), callContext.stack.pop(), callContext.stack.pop(), callContext.stack.pop()
 	toAddr := common.BigToAddress(addr)
+
+	// During AA execution before PAYGAS, restrict STATICCALL to only the precompile range as per EIP-1352.
+	// Note: This EIP is not yet accepted, but sufficient for AA prototyping.
+	if interpreter.evm.PaygasMode != PaygasNoOp && addr.Cmp(big.NewInt(0x10000)) != -1 {
+		callContext.stack.push(interpreter.intPool.getZero())
+		interpreter.intPool.put(addr, inOffset, inSize, retOffset, retSize)
+		return nil, &ErrInvalidOpCode{opcode: STATICCALL}
+	}
+
 	// Get arguments from the memory.
 	args := callContext.memory.GetPtr(inOffset.Int64(), inSize.Int64())
 
