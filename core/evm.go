@@ -46,11 +46,7 @@ func NewEVMContext(msg Message, header *types.Header, chain ChainContext, author
 	}
 	var paygasMode = vm.PaygasNoOp
 	if msg.IsAA() {
-		if msg.To() != nil {
-			paygasMode = vm.PaygasContinue
-		} else {
-			paygasMode = vm.PaygasHalt
-		}
+		paygasMode = vm.PaygasContinue
 	}
 	return vm.Context{
 		CanTransfer: CanTransfer,

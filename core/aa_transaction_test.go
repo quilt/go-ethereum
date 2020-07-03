@@ -132,26 +132,6 @@ func TestTransactionValidation(t *testing.T) {
 	testValidate(blockchain, statedb, tx, 400000, nil, t)
 }
 
-func TestInvalidEVMConfig(t *testing.T) {
-	var (
-		blockchain = setupBlockchain(10000000)
-		statedb, _ = blockchain.State()
-
-		context = NewEVMContext(types.AAEntryMessage, blockchain.CurrentHeader(), blockchain, &common.Address{})
-	)
-	context.PaygasMode = vm.PaygasNoOp
-	var (
-		vmenv = vm.NewEVM(context, statedb, blockchain.Config(), vm.Config{})
-
-		tx          = &types.Transaction{}
-		err         = Validate(tx, types.HomesteadSigner{}, vmenv, 400000)
-		expectedErr = ErrIncorrectAAConfig
-	)
-	if err != expectedErr {
-		t.Error("\n\texpected:", expectedErr, "\n\tgot:", err)
-	}
-}
-
 func TestMalformedTransaction(t *testing.T) {
 	var (
 		blockchain = setupBlockchain(10000000)
