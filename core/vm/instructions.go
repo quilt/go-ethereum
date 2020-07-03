@@ -904,18 +904,18 @@ func makeLog(size int) executionFunc {
 
 func opPaygas(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]byte, error) {
 	gasprice := callContext.stack.pop()
-	if interpreter.paygasMode == PaygasNoOp {
+	if interpreter.evm.PaygasMode == PaygasNoOp {
 		interpreter.intPool.put(gasprice)
 	} else {
-		mgval := new(big.Int).Mul(new(big.Int).SetUint64(interpreter.paygasLimit), gasprice)
+		mgval := new(big.Int).Mul(new(big.Int).SetUint64(interpreter.evm.TxGasLimit), gasprice)
 		if interpreter.evm.StateDB.GetBalance(callContext.contract.Address()).Cmp(mgval) < 0 {
 			return nil, ErrPaygasInsufficientFunds
 		}
 		interpreter.evm.StateDB.SubBalance(callContext.contract.Address(), mgval)
 
 		interpreter.evm.snapshots[len(interpreter.evm.snapshots)-1] = interpreter.evm.StateDB.Snapshot()
-		interpreter.paygasMode = PaygasNoOp
-		interpreter.paygasPrice = gasprice
+		interpreter.evm.PaygasMode = PaygasNoOp
+		interpreter.evm.GasPrice = gasprice
 	}
 
 	return nil, nil

@@ -44,6 +44,10 @@ func NewEVMContext(msg Message, header *types.Header, chain ChainContext, author
 	} else {
 		beneficiary = *author
 	}
+	var paygasMode = vm.PaygasNoOp
+	if msg.IsAA() {
+		paygasMode = vm.PaygasContinue
+	}
 	return vm.Context{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
@@ -55,6 +59,8 @@ func NewEVMContext(msg Message, header *types.Header, chain ChainContext, author
 		Difficulty:  new(big.Int).Set(header.Difficulty),
 		GasLimit:    header.GasLimit,
 		GasPrice:    new(big.Int).Set(msg.GasPrice()),
+		PaygasMode:  paygasMode,
+		TxGasLimit:  msg.Gas(),
 	}
 }
 

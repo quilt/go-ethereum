@@ -18,7 +18,6 @@ package vm
 
 import (
 	"hash"
-	"math/big"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -39,11 +38,6 @@ type Config struct {
 	EVMInterpreter   string // External EVM interpreter options
 
 	ExtraEips []int // Additional EIPS that are to be enabled
-
-	// paygasMode sets the behavior of the PAYGAS opcode.
-	PaygasMode  PaygasMode
-	paygasPrice *big.Int
-	paygasLimit uint64
 }
 
 // Interpreter is used to run Ethereum based contracts and will utilise the
@@ -66,9 +60,6 @@ type Interpreter interface {
 	// }
 	// ```
 	CanRun([]byte) bool
-
-	SetAAConfig(paygasMode PaygasMode, paygasPrice *big.Int, paygasLimit uint64)
-	GetAAConfig() (paygasMode PaygasMode, paygasPrice *big.Int)
 }
 
 // callCtx contains the things that are per-call, such as stack and memory,
@@ -92,10 +83,6 @@ type EVMInterpreter struct {
 	evm *EVM
 	cfg Config
 
-	paygasMode  PaygasMode
-	paygasPrice *big.Int
-	paygasLimit uint64
-
 	intPool *intPool
 
 	hasher    keccakState // Keccak256 hasher instance shared across opcodes
@@ -114,7 +101,7 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 		var jt JumpTable
 		switch {
 		case evm.chainRules.IsAccountAbstraction:
-			jt = newAccountAbstractionInstructionSet(cfg.PaygasMode)
+			jt = newAccountAbstractionInstructionSet(evm.PaygasMode)
 		case evm.chainRules.IsIstanbul:
 			jt = istanbulInstructionSet
 		case evm.chainRules.IsConstantinople:
@@ -141,9 +128,8 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	}
 
 	return &EVMInterpreter{
-		paygasMode: cfg.PaygasMode,
-		evm:        evm,
-		cfg:        cfg,
+		evm: evm,
+		cfg: cfg,
 	}
 }
 
@@ -240,7 +226,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		if !operation.valid {
 			return nil, &ErrInvalidOpCode{opcode: op}
 		}
-		if in.paygasMode != PaygasNoOp && !operation.internal {
+		if in.evm.PaygasMode != PaygasNoOp && !operation.internal {
 			return nil, &ErrInvalidOpCode{opcode: op}
 		}
 		// Validate stack
@@ -333,13 +319,4 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 // run by the current interpreter.
 func (in *EVMInterpreter) CanRun(code []byte) bool {
 	return true
-}
-
-func (in *EVMInterpreter) SetAAConfig(paygasMode PaygasMode, paygasPrice *big.Int, paygasLimit uint64) {
-	in.paygasMode = paygasMode
-	in.paygasPrice = paygasPrice
-	in.paygasLimit = paygasLimit
-}
-func (in *EVMInterpreter) GetAAConfig() (paygasMode PaygasMode, paygasPrice *big.Int) {
-	return in.paygasMode, in.paygasPrice
 }

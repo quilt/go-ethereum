@@ -252,11 +252,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				return nil, ErrInvalidAAPrefix
 			}
 		}
-		if st.evm.PaygasMode() == vm.PaygasNoOp {
-			st.evm.SetPaygasMode(vm.PaygasContinue)
-		}
-		if st.evm.PaygasLimit() == 0 {
-			st.evm.SetPaygasLimit(st.msg.Gas())
+		if st.evm.PaygasMode == vm.PaygasNoOp {
+			st.evm.PaygasMode = vm.PaygasContinue
 		}
 	}
 
@@ -296,7 +293,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		}
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
-		if msg.IsAA() && st.evm.PaygasMode() != vm.PaygasNoOp {
+		if msg.IsAA() && st.evm.PaygasMode != vm.PaygasNoOp {
 			if vmerr != nil {
 				return nil, vmerr
 			} else {
@@ -305,7 +302,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		}
 	}
 	if st.msg.IsAA() {
-		st.gasPrice = st.evm.PaygasPrice()
+		st.gasPrice = st.evm.GasPrice
 	}
 	st.refundGas()
 	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
