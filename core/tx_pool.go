@@ -629,7 +629,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) (uint64, error
 		aaValidationTimer.UpdateSince(now)
 		if err != nil {
 			log.Trace("AA tx execution invalidated", "hash", tx.Hash(), "err", err)
-			return 0, ErrInvalidAA
+			return usedGas, ErrInvalidAA
 		}
 	}
 
