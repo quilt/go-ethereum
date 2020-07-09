@@ -580,40 +580,41 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 
 // validateTx checks whether a transaction is valid according to the consensus
 // rules and adheres to some heuristic limits of the local node (price and size).
-func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
+func (pool *TxPool) validateTx(tx *types.Transaction, local bool) (uint64, error) {
 	validationMeter.Mark(1)
+	var usedGas uint64 = 0
 	// Reject transactions over defined size to prevent DOS attacks
 	if uint64(tx.Size()) > txMaxSize {
-		return ErrOversizedData
+		return usedGas, ErrOversizedData
 	}
 	// Transactions can't be negative. This may never happen using RLP decoded
 	// transactions but may occur if you create a transaction using the RPC.
 	if tx.Value().Sign() < 0 {
-		return ErrNegativeValue
+		return usedGas, ErrNegativeValue
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
 	if pool.currentMaxGas < tx.Gas() {
-		return ErrGasLimit
+		return usedGas, ErrGasLimit
 	}
 
 	if tx.IsAA() {
 		if tx.Value().Sign() != 0 {
-			return ErrInvalidAAData
+			return usedGas, ErrInvalidAAData
 		}
 
 		if tx.RawGasPrice().Sign() != 0 {
-			return ErrInvalidAAData
+			return usedGas, ErrInvalidAAData
 		}
 
 		if tx.Nonce() != 0 {
-			return ErrInvalidAAData
+			return usedGas, ErrInvalidAAData
 		}
 	}
 
 	addr, err := txSponsor(pool.signer, tx)
 
 	if err != nil {
-		return ErrInvalidSender
+		return usedGas, ErrInvalidSender
 	}
 
 	if tx.IsAA() {
@@ -621,44 +622,45 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		context := NewEVMContext(types.AAEntryMessage, pool.chain.CurrentBlock().Header(), pool.chain, &common.Address{})
 		vm := vm.NewEVM(context, pool.currentState, pool.chain.Config(), vm.Config{PaygasMode: vm.PaygasHalt})
 		snapshotRevisionId := pool.currentState.Snapshot()
-		usedGas, err := Validate(tx, pool.signer, vm, pool.config.AAGasLimit)
+		var err error
+		usedGas, err = Validate(tx, pool.signer, vm, pool.config.AAGasLimit)
 		// validate updates the current state, we need to revert
 		pool.currentState.RevertToSnapshot(snapshotRevisionId)
 		aaValidationTimer.UpdateSince(now)
 		if err != nil {
 			log.Trace("AA tx execution invalidated", "hash", tx.Hash(), "err", err)
-			return ErrInvalidAA
+			return 0, ErrInvalidAA
 		}
 	}
 
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(addr) // account may be local even if the transaction arrived from the network
 	if !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
-		return ErrUnderpriced
+		return usedGas, ErrUnderpriced
 	}
 
 	// Ensure the transaction adheres to nonce ordering
 	if !tx.IsAA() && (pool.currentState.GetNonce(addr) > tx.Nonce()) {
-		return ErrNonceTooLow
+		return usedGas, ErrNonceTooLow
 	}
 
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
 	if pool.currentState.GetBalance(addr).Cmp(tx.Cost()) < 0 {
-		return ErrInsufficientFunds
+		return usedGas, ErrInsufficientFunds
 	}
 
 	// Ensure the transaction has more gas than the basic tx fee.
 	intrGas, err := IntrinsicGas(tx.Data(), tx.To() == nil, true, pool.istanbul)
 	if err != nil {
-		return err
+		return usedGas, err
 	}
 
 	if tx.Gas() < intrGas {
-		return ErrIntrinsicGas
+		return usedGas, ErrIntrinsicGas
 	}
 
-	return nil
+	return usedGas, nil
 }
 
 // add validates a transaction and inserts it into the non-executable queue for later
@@ -679,7 +681,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 
 	// If the transaction fails basic validation, discard it
 	var start = time.Now()
-	if err := pool.validateTx(tx, local); err != nil {
+	if gasUsed, err := pool.validateTx(tx, local); err != nil {
 		validationTimer.UpdateSince(start)
 		end := time.Now()
 		pool.logger.Info("validation_time",
@@ -689,6 +691,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 			"gas_price", tx.GasPrice(),
 			"recipient", tx.To(),
 			"gas", tx.Gas(),
+			"gas_used", gasUsed,
 			"start_time", start.UnixNano(),
 			"end_time", end.UnixNano(),
 			"duration", end.Sub(start).Microseconds(),
@@ -706,6 +709,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 			"gas_price", tx.GasPrice(),
 			"recipient", tx.To(),
 			"gas", tx.Gas(),
+			"gas_used", gasUsed,
 			"start_time", start.UnixNano(),
 			"end_time", end.UnixNano(),
 			"duration", end.Sub(start).Microseconds(),
