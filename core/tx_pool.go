@@ -30,9 +30,8 @@ static long long getThreadCpuTimeNs() {
     return t.tv_sec * 1000000000LL + t.tv_nsec;
 }
 */
-
+import "C"
 import (
-	"C"
 	"encoding/json"
 	"errors"
 	"fmt"
