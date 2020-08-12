@@ -16,6 +16,20 @@
 
 package core
 
+/*
+#include <pthread.h>
+#include <time.h>
+#include <stdio.h>
+static long long getThreadCpuTimeNs() {
+    struct timespec t;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t)) {
+        perror("clock_gettime");
+        return 0;
+    }
+    return t.tv_sec * 1000000000LL + t.tv_nsec;
+}
+*/
+import "C"
 import (
 	"errors"
 	"math"
@@ -528,6 +542,8 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	var start = time.Now()
+	cputime1 := C.getThreadCpuTimeNs()
+
 	validationMeter.Mark(1)
 	// Reject transactions over defined size to prevent DOS attacks
 	if uint64(tx.Size()) > txMaxSize {
@@ -579,8 +595,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrIntrinsicGas
 	}
 
+	cputime2 := C.getThreadCpuTimeNs()
+
 	validationTimer.UpdateSince(start)
-	successValidationTimer.UpdateSince(start)
+	var cpu_duration time.Duration = time.Duration(int64((cputime2-cputime1)*1000)) * time.Nanosecond
+	successValidationTimer.Update(cpu_duration)
 	return nil
 }
 
