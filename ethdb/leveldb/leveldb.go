@@ -96,9 +96,9 @@ func New(file string, cache int, handles int, namespace string) (*Database, erro
 
 	// Open the db and recover any potential corruptions
 	db, err := leveldb.OpenFile(file, &opt.Options{
-		OpenFilesCacheCapacity: handles,
-		BlockCacheCapacity:     cache / 2 * opt.MiB,
-		WriteBuffer:            cache / 4 * opt.MiB, // Two of these are used internally
+		OpenFilesCacheCapacity: 0,
+		BlockCacheCapacity:     0,
+		WriteBuffer:            0, // Two of these are used internally
 		Filter:                 filter.NewBloomFilter(10),
 		DisableSeeksCompaction: true,
 	})
