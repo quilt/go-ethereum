@@ -27,7 +27,7 @@ import (
 
 const (
 	// Number of codehash->size associations to keep.
-	codeSizeCacheSize = 100000
+	codeSizeCacheSize = 0
 )
 
 // Database wraps access to tries and contract code.
@@ -106,10 +106,10 @@ func NewDatabase(db ethdb.Database) Database {
 // NewDatabaseWithCache creates a backing store for state. The returned database
 // is safe for concurrent use and retains a lot of collapsed RLP trie nodes in a
 // large memory cache.
-func NewDatabaseWithCache(db ethdb.Database, cache int) Database {
+func NewDatabaseWithCache(db ethdb.Database, _cache int) Database {
 	csc, _ := lru.New(codeSizeCacheSize)
 	return &cachingDB{
-		db:            trie.NewDatabaseWithCache(db, cache),
+		db:            trie.NewDatabaseWithCache(db, 0),
 		codeSizeCache: csc,
 	}
 }
