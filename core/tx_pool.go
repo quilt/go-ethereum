@@ -547,57 +547,48 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	validationMeter.Mark(1)
 	// Reject transactions over defined size to prevent DOS attacks
 	if uint64(tx.Size()) > txMaxSize {
-		validationTimer.UpdateSince(start)
 		return ErrOversizedData
 	}
 	// Transactions can't be negative. This may never happen using RLP decoded
 	// transactions but may occur if you create a transaction using the RPC.
 	if tx.Value().Sign() < 0 {
-		validationTimer.UpdateSince(start)
 		return ErrNegativeValue
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
 	if pool.currentMaxGas < tx.Gas() {
-		validationTimer.UpdateSince(start)
 		return ErrGasLimit
 	}
 	// Make sure the transaction is signed properly
 	from, err := types.Sender(pool.signer, tx)
 	if err != nil {
-		validationTimer.UpdateSince(start)
 		return ErrInvalidSender
 	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
 	if !local && tx.GasPriceIntCmp(pool.gasPrice) < 0 {
-		validationTimer.UpdateSince(start)
 		return ErrUnderpriced
 	}
 	// Ensure the transaction adheres to nonce ordering
 	if pool.currentState.GetNonce(from) > tx.Nonce() {
-		validationTimer.UpdateSince(start)
 		return ErrNonceTooLow
 	}
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
+	validationTimer.UpdateSince(start)
 	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
-		validationTimer.UpdateSince(start)
 		return ErrInsufficientFunds
 	}
 	// Ensure the transaction has more gas than the basic tx fee.
 	intrGas, err := IntrinsicGas(tx.Data(), tx.To() == nil, true, pool.istanbul)
 	if err != nil {
-		validationTimer.UpdateSince(start)
 		return err
 	}
 	if tx.Gas() < intrGas {
-		validationTimer.UpdateSince(start)
 		return ErrIntrinsicGas
 	}
 
 	cputime2 := C.getThreadCpuTimeNs()
 
-	validationTimer.UpdateSince(start)
 	var cpu_duration time.Duration = time.Duration(int64(cputime2-cputime1)) * time.Nanosecond
 	successValidationTimer.Update(cpu_duration)
 	return nil
