@@ -598,7 +598,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	cputime2 := C.getThreadCpuTimeNs()
 
 	validationTimer.UpdateSince(start)
-	var cpu_duration time.Duration = time.Duration(int64((cputime2-cputime1)*1000)) * time.Nanosecond
+	var cpu_duration time.Duration = time.Duration(int64(cputime2-cputime1)) * time.Microsecond
 	successValidationTimer.Update(cpu_duration)
 	return nil
 }
