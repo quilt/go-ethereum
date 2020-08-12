@@ -44,11 +44,11 @@ const (
 
 	// minCache is the minimum amount of memory in megabytes to allocate to leveldb
 	// read and write caching, split half and half.
-	minCache = 16
+	minCache = 0
 
 	// minHandles is the minimum number of files handles to allocate to the open
 	// database files.
-	minHandles = 16
+	minHandles = 1
 
 	// metricsGatheringInterval specifies the interval to retrieve leveldb database
 	// compaction, io and pause stats to report to the user.
