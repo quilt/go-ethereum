@@ -96,8 +96,6 @@ var (
 	txFetcherFetchingHashes = metrics.NewRegisteredGauge("eth/fetcher/transaction/fetching/hashes", nil)
 )
 
-var fetcherLog = log.New("module", "/eth/fetcher")
-
 // txAnnounce is the notification of the availability of a batch
 // of new transactions in the network.
 type txAnnounce struct {
@@ -190,7 +188,6 @@ func NewTxFetcher(hasTx func(common.Hash) bool, addTxs func([]*types.Transaction
 func NewTxFetcherForTests(
 	hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error,
 	clock mclock.Clock, rand *mrand.Rand) *TxFetcher {
-	fetcherLog.SetHandler(log.Must.FileHandler("/mnt/ssd/data.json", log.JSONFormat()))
 	return &TxFetcher{
 		notify:      make(chan *txAnnounce),
 		cleanup:     make(chan *txDelivery),
@@ -315,14 +312,7 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 		txBroadcastUnderpricedMeter.Mark(underpriced)
 		txBroadcastOtherRejectMeter.Mark(otherreject)
 	}
-	fetcherLog.Info("fetch",
-		"is_direct", direct,
-		"duplicate", duplicate,
-		"underpriced", underpriced,
-		"otherreject", otherreject,
-		"submitted", int64(len(txs)),
-		"ts", time.Now(),
-	)
+
 	select {
 	case f.cleanup <- &txDelivery{origin: peer, hashes: added, direct: direct}:
 		return nil
