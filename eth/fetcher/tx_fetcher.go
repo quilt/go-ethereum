@@ -323,6 +323,7 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 		"otherreject", otherreject,
 		"submitted", int64(len(txs)),
 		"ts", time.Now(),
+		"peer", peer,
 	)
 	select {
 	case f.cleanup <- &txDelivery{origin: peer, hashes: added, direct: direct}:
