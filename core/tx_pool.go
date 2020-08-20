@@ -16,6 +16,21 @@
 
 package core
 
+/*
+#include <pthread.h>
+#include <time.h>
+#include <stdio.h>
+
+static long long getThreadCpuTimeNs() {
+    struct timespec t;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t)) {
+        perror("clock_gettime");
+        return 0;
+    }
+    return t.tv_sec * 1000000000LL + t.tv_nsec;
+}
+*/
+import "C"
 import (
 	"encoding/json"
 	"errors"
@@ -681,9 +696,11 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 
 	// If the transaction fails basic validation, discard it
 	var start = time.Now()
+	cputime1 := C.getThreadCpuTimeNs()
 	if gasUsed, err := pool.validateTx(tx, local); err != nil {
 		validationTimer.UpdateSince(start)
 		end := time.Now()
+		cputime2 := C.getThreadCpuTimeNs()
 		pool.logger.Info("validation_time",
 			"is_aa", tx.IsAA(),
 			"hash", tx.Hash(),
@@ -695,6 +712,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 			"start_time", start.UnixNano(),
 			"end_time", end.UnixNano(),
 			"duration", end.Sub(start).Microseconds(),
+			"cpu_duration", cputime2-cputime1,
 			"success", false,
 		)
 		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
@@ -702,6 +720,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		return false, err
 	} else {
 		end := time.Now()
+		cputime2 := C.getThreadCpuTimeNs()
 		pool.logger.Info("validation_time",
 			"is_aa", tx.IsAA(),
 			"hash", tx.Hash(),
@@ -713,6 +732,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 			"start_time", start.UnixNano(),
 			"end_time", end.UnixNano(),
 			"duration", end.Sub(start).Microseconds(),
+			"cpu_duration", cputime2-cputime1,
 			"success", true,
 		)
 	}
