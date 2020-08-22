@@ -377,7 +377,11 @@ func (pm *ProtocolManager) handle(p *peer) error {
 // peer. The remote connection is torn down upon returning any error.
 func (pm *ProtocolManager) handleMsg(p *peer) error {
 	// Read the next message from the remote peer, and ensure it's fully consumed
+	a := time.Now()
 	msg, err := p.rw.ReadMsg()
+	b := time.Now()
+	p.Log().Trace("a - b", "diff", b.Sub(a).Microseconds())
+
 	if err != nil {
 		return err
 	}
@@ -786,9 +790,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		// Transactions can be processed, parse all of them and deliver to the pool
 		var txs []*types.Transaction
+		c := time.Now()
 		if err := msg.Decode(&txs); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
+		d := time.Now()
+		p.Log().Trace("c - d", "diff", d.Sub(c).Microseconds())
+
+		d := time.Now()
 		for i, tx := range txs {
 			// Validate and mark the remote transaction
 			if tx == nil {
@@ -796,6 +805,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			p.MarkTransaction(tx.Hash())
 		}
+		p.Log().Trace("e - f", "diff", f.Sub(e).Microseconds())
+		f := time.Now()
 		pm.txFetcher.Enqueue(p.id, txs, msg.Code == PooledTransactionsMsg)
 
 	default:
