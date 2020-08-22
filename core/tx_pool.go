@@ -626,7 +626,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) (uint64, error
 		}
 	}
 
-	addr, err := txSponsor(pool.signer, tx)
+	addr, err := txSponsorNoCache(pool.signer, tx)
 
 	if err != nil {
 		return usedGas, ErrInvalidSender
@@ -1803,4 +1803,12 @@ func txSponsor(s types.Signer, tx *types.Transaction) (common.Address, error) {
 	}
 
 	return types.Sender(s, tx)
+}
+
+func txSponsorNoCache(s types.Signer, tx *types.Transaction) (common.Address, error) {
+	if tx.IsAA() {
+		return *tx.To(), nil
+	}
+
+	return types.SenderNoCache(s, tx)
 }

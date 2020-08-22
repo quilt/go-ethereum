@@ -88,6 +88,14 @@ func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 	return addr, nil
 }
 
+func SenderNoCache(signer Signer, tx *Transaction) (common.Address, error) {
+	addr, err := signer.Sender(tx)
+	if err != nil {
+		return common.Address{}, err
+	}
+	return addr, nil
+}
+
 // Signer encapsulates transaction signature handling. Note that this interface is not a
 // stable API and may change at any time to accommodate new protocol rules.
 type Signer interface {
