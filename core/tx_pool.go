@@ -939,7 +939,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		types.Sender(pool.signer, tx)
 	}
 	h := time.Now()
-	p.Log().Trace("g - h", "diff", h.Sub(g).Microseconds())
+	log.Trace("g - h", "diff", h.Sub(g).Microseconds())
 	// Process all the new transaction and merge any errors into the original slice
 	pool.mu.Lock()
 	newErrs, dirtyAddrs := pool.addTxsLocked(news, local)
