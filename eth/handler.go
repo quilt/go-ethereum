@@ -797,7 +797,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		d := time.Now()
 		p.Log().Trace("c - d", "diff", d.Sub(c).Microseconds())
 
-		d := time.Now()
+		e := time.Now()
 		for i, tx := range txs {
 			// Validate and mark the remote transaction
 			if tx == nil {
@@ -805,8 +805,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			p.MarkTransaction(tx.Hash())
 		}
-		p.Log().Trace("e - f", "diff", f.Sub(e).Microseconds())
 		f := time.Now()
+		p.Log().Trace("e - f", "diff", e.Sub(f).Microseconds())
 		pm.txFetcher.Enqueue(p.id, txs, msg.Code == PooledTransactionsMsg)
 
 	default:
