@@ -658,7 +658,6 @@ func TestTransactionQueueEIP1559Finalized(t *testing.T) {
 	pool.currentState.AddBalance(from, big.NewInt(1000))
 	<-pool.requestReset(nil, nil)
 
-
 	pool.enqueueTx(tx.Hash(), tx)
 	<-pool.requestPromoteExecutables(newAccountSet(pool.signer, from))
 	if len(pool.pending) != 1 {
@@ -2354,8 +2353,10 @@ func testTransactionQueueGlobalLimitingEIP1559Finalized(t *testing.T, nolocals b
 //
 // This logic should not hold for local transactions, unless the local tracking
 // mechanism is disabled.
-func TestTransactionQueueTimeLimiting(t *testing.T)         { testTransactionQueueTimeLimiting(t, false) }
-func TestTransactionQueueTimeLimitingNoLocals(t *testing.T) { testTransactionQueueTimeLimiting(t, true) }
+func TestTransactionQueueTimeLimiting(t *testing.T) { testTransactionQueueTimeLimiting(t, false) }
+func TestTransactionQueueTimeLimitingNoLocals(t *testing.T) {
+	testTransactionQueueTimeLimiting(t, true)
+}
 
 func testTransactionQueueTimeLimiting(t *testing.T, nolocals bool) {
 	// Reduce the eviction interval to a testable amount
@@ -3780,7 +3781,6 @@ func TestTransactionPoolUnderpricingEIP1559(t *testing.T) {
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
-<<<<<<< HEAD
 
 	// Allow the eviction interval to run
 	time.Sleep(2 * evictionInterval)
@@ -4369,7 +4369,6 @@ func TestTransactionDeduplication(t *testing.T) {
 			t.Errorf("add %d failed: %v", i, err)
 		}
 	}
-<<<<<<< HEAD
 	validate()
 
 	// Reprice the pool and check that nothing is dropped
@@ -4412,15 +4411,16 @@ func TestTransactionPoolUnderpricing(t *testing.T) {
 	for i := 0; i < len(keys); i++ {
 		keys[i], _ = crypto.GenerateKey()
 		pool.currentState.AddBalance(crypto.PubkeyToAddress(keys[i].PublicKey), big.NewInt(1000000))
-	pending, queued = pool.Stats()
-	if pending != len(txs) {
-		t.Fatalf("pending transactions mismatched: have %d, want %d", pending, len(txs))
-	}
-	if queued != 0 {
-		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 0)
-	}
-	if err := validateTxPoolInternals(pool); err != nil {
-		t.Fatalf("pool internal state corrupted: %v", err)
+		pending, queued = pool.Stats()
+		if pending != len(txs) {
+			t.Fatalf("pending transactions mismatched: have %d, want %d", pending, len(txs))
+		}
+		if queued != 0 {
+			t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 0)
+		}
+		if err := validateTxPoolInternals(pool); err != nil {
+			t.Fatalf("pool internal state corrupted: %v", err)
+		}
 	}
 }
 
@@ -4906,8 +4906,10 @@ func testTransactionJournaling(t *testing.T, nolocals bool) {
 	pool.Stop()
 }
 
-func TestTransactionJournalingEIP1559(t *testing.T)         { testTransactionJournalingEIP1559(t, false) }
-func TestTransactionJournalingNoLocalsEIP1559(t *testing.T) { testTransactionJournalingEIP1559(t, true) }
+func TestTransactionJournalingEIP1559(t *testing.T) { testTransactionJournalingEIP1559(t, false) }
+func TestTransactionJournalingNoLocalsEIP1559(t *testing.T) {
+	testTransactionJournalingEIP1559(t, true)
+}
 
 func testTransactionJournalingEIP1559(t *testing.T, nolocals bool) {
 	t.Parallel()
