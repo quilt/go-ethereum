@@ -101,15 +101,15 @@ func init() {
 		Period: 10,
 		Epoch:  30000,
 	}
-	tx, _ := types.SignTx(types.NewTransaction(0, testUserAddress, big.NewInt(1000), params.TxGas, new(big.Int), nil, nil, nil), types.HomesteadSigner{}, testBankKey)
+	tx, _ := types.SignTx(types.NewTransaction(0, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil), types.HomesteadSigner{}, testBankKey)
 	pendingTxs = append(pendingTxs, tx)
 	pendingLegacyAndEIP1559Txs = append(pendingLegacyAndEIP1559Txs, tx)
-	tx, _ = types.SignTx(types.NewTransaction(1, testUserAddress, big.NewInt(1000), params.TxGas, new(big.Int), nil, nil, nil), types.HomesteadSigner{}, testBankKey)
+	tx, _ = types.SignTx(types.NewTransaction(1, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil), types.HomesteadSigner{}, testBankKey)
 	newTxs = append(newTxs, tx)
 	newLegacyAndEIP1559Txs = append(newLegacyAndEIP1559Txs, tx)
-	tx, _ = types.SignTx(types.NewTransaction(0, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil, new(big.Int), new(big.Int)), types.HomesteadSigner{}, testBankKey)
+	tx, _ = types.SignTx(types.NewEIP1559Transaction(0, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil, new(big.Int), new(big.Int)), types.HomesteadSigner{}, testBankKey)
 	pendingEIP1559Txs = append(pendingEIP1559Txs, tx)
-	tx, _ = types.SignTx(types.NewTransaction(1, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil, new(big.Int), new(big.Int)), types.HomesteadSigner{}, testBankKey)
+	tx, _ = types.SignTx(types.NewEIP1559Transaction(1, testUserAddress, big.NewInt(1000), params.TxGas, nil, nil, new(big.Int), new(big.Int)), types.HomesteadSigner{}, testBankKey)
 	newEIP1559Txs = append(newEIP1559Txs, tx)
 	rand.Seed(time.Now().UnixNano())
 }
@@ -196,15 +196,15 @@ func (b *testWorkerBackend) newRandomTx(creation, eip1559 bool) *types.Transacti
 	var tx *types.Transaction
 	if creation {
 		if eip1559 {
-			tx, _ = types.SignTx(types.NewContractCreation(b.txPool.Nonce(testBankAddress), big.NewInt(0), testGas, nil, common.FromHex(testCode), new(big.Int), new(big.Int)), types.HomesteadSigner{}, testBankKey)
+			tx, _ = types.SignTx(types.NewEIP1559ContractCreation(b.txPool.Nonce(testBankAddress), big.NewInt(0), testGas, nil, common.FromHex(testCode), new(big.Int), new(big.Int)), types.HomesteadSigner{}, testBankKey)
 		} else {
-			tx, _ = types.SignTx(types.NewContractCreation(b.txPool.Nonce(testBankAddress), big.NewInt(0), testGas, new(big.Int), common.FromHex(testCode), nil, nil), types.HomesteadSigner{}, testBankKey)
+			tx, _ = types.SignTx(types.NewContractCreation(b.txPool.Nonce(testBankAddress), big.NewInt(0), testGas, new(big.Int), common.FromHex(testCode)), types.HomesteadSigner{}, testBankKey)
 		}
 	} else {
 		if eip1559 {
-			tx, _ = types.SignTx(types.NewTransaction(b.txPool.Nonce(testBankAddress), testUserAddress, big.NewInt(1000), params.TxGas, nil, nil, new(big.Int), new(big.Int)), types.HomesteadSigner{}, testBankKey)
+			tx, _ = types.SignTx(types.NewEIP1559Transaction(b.txPool.Nonce(testBankAddress), testUserAddress, big.NewInt(1000), params.TxGas, nil, nil, new(big.Int), new(big.Int)), types.HomesteadSigner{}, testBankKey)
 		} else {
-			tx, _ = types.SignTx(types.NewTransaction(b.txPool.Nonce(testBankAddress), testUserAddress, big.NewInt(1000), params.TxGas, new(big.Int), nil, nil, nil), types.HomesteadSigner{}, testBankKey)
+			tx, _ = types.SignTx(types.NewTransaction(b.txPool.Nonce(testBankAddress), testUserAddress, big.NewInt(1000), params.TxGas, nil, nil), types.HomesteadSigner{}, testBankKey)
 		}
 	}
 	return tx

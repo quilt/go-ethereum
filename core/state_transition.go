@@ -259,11 +259,7 @@ func (st *StateTransition) preCheck() error {
 	if st.evm.ChainConfig().IsEIP1559(st.evm.BlockNumber) && st.evm.BaseFee == nil {
 		return ErrNoBaseFee
 	}
-	// We need either a GasPrice or a FeeCap and GasPremium to be set
-	if st.msg.GasPrice() == nil && (st.msg.GasPremium() == nil || st.msg.FeeCap() == nil) {
-		return ErrMissingGasFields
-	}
-	// If it is an EIp1559 transaction, make sure the derived gasPrice is >= baseFee
+	// If it is an EIP1559 transaction, make sure the derived gasPrice is >= baseFee
 	if st.isEIP1559 {
 		if st.eip1559GasPrice.Cmp(st.evm.BaseFee) < 0 {
 			return ErrEIP1559GasPriceLessThanBaseFee

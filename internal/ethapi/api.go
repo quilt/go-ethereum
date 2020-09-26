@@ -1671,9 +1671,9 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 		input = *args.Data
 	}
 	if args.To == nil {
-		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, (*big.Int)(args.GasPremium), (*big.Int)(args.FeeCap))
+		return types.NewEIP1559ContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, (*big.Int)(args.GasPremium), (*big.Int)(args.FeeCap))
 	}
-	return types.NewTransaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, (*big.Int)(args.GasPremium), (*big.Int)(args.FeeCap))
+	return types.NewEIP1559Transaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input, (*big.Int)(args.GasPremium), (*big.Int)(args.FeeCap))
 }
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
@@ -1769,9 +1769,6 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, encod
 	}
 	if tx.GasPrice() != nil && (tx.GasPremium() != nil || tx.FeeCap() != nil) {
 		return common.Hash{}, core.ErrTxSetsLegacyAndEIP1559Fields
-	}
-	if tx.GasPrice() == nil && (tx.GasPremium() == nil || tx.FeeCap() == nil) {
-		return common.Hash{}, core.ErrMissingGasFields
 	}
 	if tx.GasPremium() != nil {
 		gasPrice := new(big.Int).Add(s.b.CurrentBlock().BaseFee(), tx.GasPremium())

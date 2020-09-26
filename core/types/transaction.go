@@ -80,11 +80,19 @@ type txdataMarshaling struct {
 	S            *hexutil.Big
 }
 
-func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, gasPremium, feeCap *big.Int) *Transaction {
+func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
+	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data, nil, nil)
+}
+
+func NewContractCreation(nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
+	return newTransaction(nonce, nil, amount, gasLimit, gasPrice, data, nil, nil)
+}
+
+func NewEIP1559Transaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, gasPremium, feeCap *big.Int) *Transaction {
 	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data, gasPremium, feeCap)
 }
 
-func NewContractCreation(nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, gasPremium, feeCap *big.Int) *Transaction {
+func NewEIP1559ContractCreation(nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, gasPremium, feeCap *big.Int) *Transaction {
 	return newTransaction(nonce, nil, amount, gasLimit, gasPrice, data, gasPremium, feeCap)
 }
 
@@ -105,14 +113,11 @@ func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit 
 	if amount != nil {
 		d.Amount.Set(amount)
 	}
+	if gasPremium == nil && feeCap == nil {
+		d.Price = new(big.Int)
+	}
 	if gasPrice != nil {
 		d.Price = gasPrice
-	}
-	if gasPremium != nil {
-		d.GasPremium = gasPremium
-	}
-	if feeCap != nil {
-		d.FeeCap = feeCap
 	}
 	if gasPremium != nil {
 		d.GasPremium = gasPremium

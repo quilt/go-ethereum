@@ -38,8 +38,6 @@ var (
 		common.HexToAddress("095e7baea6a6c7c4c2dfeb977efac326af552d87"),
 		big.NewInt(0), 0, big.NewInt(0),
 		nil,
-		nil,
-		nil,
 	)
 
 	rightvrsTx, _ = NewTransaction(
@@ -49,8 +47,6 @@ var (
 		2000,
 		big.NewInt(1),
 		common.FromHex("5544"),
-		nil,
-		nil,
 	).WithSignature(
 		HomesteadSigner{},
 		common.Hex2Bytes("98ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4a8887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a301"),
@@ -62,8 +58,6 @@ var (
 		2000,
 		big.NewInt(1),
 		common.FromHex("5544"),
-		nil,
-		nil,
 	)
 
 	noSignatureTx = NewTransaction(
@@ -73,11 +67,9 @@ var (
 		2000,
 		big.NewInt(1),
 		common.FromHex("5544"),
-		nil,
-		nil,
 	)
 
-	eip1559Tx, _ = NewTransaction(
+	eip1559Tx, _ = NewEIP1559Transaction(
 		3,
 		common.HexToAddress("b94f5374fce5edbc8e2a8697c15331677e6ebf0b"),
 		big.NewInt(10),
@@ -91,7 +83,7 @@ var (
 		common.Hex2Bytes("98ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4a8887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a301"),
 	)
 
-	eip1559NoRctNoSigTx = NewContractCreation(
+	eip1559NoRctNoSigTx = NewEIP1559ContractCreation(
 		3,
 		big.NewInt(10),
 		2000,
@@ -101,7 +93,7 @@ var (
 		big.NewInt(800000),
 	)
 
-	eip1559NoSignatureTx = NewTransaction(
+	eip1559NoSignatureTx = NewEIP1559Transaction(
 		3,
 		common.HexToAddress("b94f5374fce5edbc8e2a8697c15331677e6ebf0b"),
 		big.NewInt(10),
@@ -332,10 +324,10 @@ func TestTransactionPriceNonceSort(t *testing.T) {
 		addr := crypto.PubkeyToAddress(key.PublicKey)
 		for i := 0; i < 25; i++ {
 			if i%2 == 0 {
-				tx, _ := SignTx(NewTransaction(uint64(start+i), common.Address{}, big.NewInt(100), 100, big.NewInt(int64(start+i)), nil, nil, nil), signer, key)
+				tx, _ := SignTx(NewTransaction(uint64(start+i), common.Address{}, big.NewInt(100), 100, big.NewInt(int64(start+i)), nil), signer, key)
 				groups[addr] = append(groups[addr], tx)
 			} else {
-				tx, _ := SignTx(NewTransaction(uint64(start+i), common.Address{}, big.NewInt(100), 100, nil, nil, big.NewInt(int64(start+i)), big.NewInt(int64(start+i+1))), signer, key)
+				tx, _ := SignTx(NewEIP1559Transaction(uint64(start+i), common.Address{}, big.NewInt(100), 100, nil, nil, big.NewInt(int64(start+i)), big.NewInt(int64(start+i+1))), signer, key)
 				groups[addr] = append(groups[addr], tx)
 			}
 		}
@@ -447,9 +439,9 @@ func TestTransactionJSON(t *testing.T) {
 	for i := uint64(0); i < 25; i++ {
 		var tx *Transaction
 		if i%2 == 0 {
-			tx = NewTransaction(i, common.Address{1}, common.Big0, 1, common.Big2, []byte("abcdef"), nil, nil)
+			tx = NewTransaction(i, common.Address{1}, common.Big0, 1, common.Big2, []byte("abcdef"))
 		} else {
-			tx = NewContractCreation(i, common.Big0, 1, common.Big2, []byte("abcdef"), nil, nil)
+			tx = NewContractCreation(i, common.Big0, 1, common.Big2, []byte("abcdef"))
 		}
 		transactions = append(transactions, tx)
 
@@ -494,9 +486,9 @@ func TestEIP1559TransactionJSON(t *testing.T) {
 	for i := uint64(0); i < 25; i++ {
 		var tx *Transaction
 		if i%2 == 0 {
-			tx = NewTransaction(i, common.Address{1}, common.Big0, 1, nil, []byte("abcdef"), big.NewInt(200000), big.NewInt(800000))
+			tx = NewEIP1559Transaction(i, common.Address{1}, common.Big0, 1, nil, []byte("abcdef"), big.NewInt(200000), big.NewInt(800000))
 		} else {
-			tx = NewContractCreation(i, common.Big0, 1, nil, []byte("abcdef"), big.NewInt(200000), big.NewInt(800000))
+			tx = NewEIP1559ContractCreation(i, common.Big0, 1, nil, []byte("abcdef"), big.NewInt(200000), big.NewInt(800000))
 		}
 		transactions = append(transactions, tx)
 
