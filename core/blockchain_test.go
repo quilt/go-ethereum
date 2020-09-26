@@ -58,7 +58,7 @@ func newCanonical(engine consensus.Engine, n int, full bool, chainConfig *params
 	)
 
 	// Initialize a fresh chain with only a genesis block
-	blockchain, _ := NewBlockChain(db, nil, params.AllEthashProtocolChanges, engine, vm.Config{}, nil, nil)
+	blockchain, _ := NewBlockChain(db, nil, chainConfig, engine, vm.Config{}, nil, nil)
 
 	// Create and inject the requested chain
 	if n == 0 {

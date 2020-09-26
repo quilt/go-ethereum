@@ -483,20 +483,20 @@ func TestInvalidTransactionsEIP1559(t *testing.T) {
 	if err := pool.AddRemote(tx); err != nil {
 		t.Error("expected", nil, "got", err)
 	}
-	if err := pool.AddLocal(tx); err.Error() != fmt.Sprintf("known transaction: %s", tx.Hash().String()[2:]) {
-		t.Error("expected", fmt.Sprintf("known transaction: %s", tx.Hash().String()[2:]), "got", err)
+	if err := pool.AddLocal(tx); err != ErrAlreadyKnown {
+		t.Error("expected", ErrAlreadyKnown, "got", err)
 	}
 
 	tx = eip1559Transaction(2, 100000, key, big.NewInt(1), big.NewInt(10))
 	if err := pool.AddRemote(tx); err != nil {
 		t.Error("expected", nil, "got", err)
 	}
-	if err := pool.AddLocal(tx); err.Error() != fmt.Sprintf("known transaction: %s", tx.Hash().String()[2:]) {
-		t.Error("expected", fmt.Sprintf("known transaction: %s", tx.Hash().String()[2:]), "got", err)
+	if err := pool.AddLocal(tx); err != ErrAlreadyKnown {
+		t.Error("expected", ErrAlreadyKnown, "got", err)
 	}
 
-	if err := pool.AddLocal(tx); err.Error() != fmt.Sprintf("known transaction: %s", tx.Hash().String()[2:]) {
-		t.Error("expected", fmt.Sprintf("known transaction: %s", tx.Hash().String()[2:]), "got", err)
+	if err := pool.AddLocal(tx); err != ErrAlreadyKnown {
+		t.Error("expected", ErrAlreadyKnown, "got", err)
 	}
 
 	tx = malformedTransaction(2, 100000, key, big.NewInt(5), big.NewInt(1), big.NewInt(10))

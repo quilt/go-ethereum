@@ -311,9 +311,15 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 	return nil
 }
 
-func (tx *Transaction) Data() []byte       { return common.CopyBytes(tx.data.Payload) }
-func (tx *Transaction) Gas() uint64        { return tx.data.GasLimit }
-func (tx *Transaction) GasPrice() *big.Int { return new(big.Int).Set(tx.data.Price) }
+func (tx *Transaction) Data() []byte { return common.CopyBytes(tx.data.Payload) }
+func (tx *Transaction) Gas() uint64  { return tx.data.GasLimit }
+func (tx *Transaction) GasPrice() *big.Int {
+	if tx.data.Price == nil {
+		return nil
+	} else {
+		return new(big.Int).Set(tx.data.Price)
+	}
+}
 func (tx *Transaction) GasPriceCmp(other *Transaction, baseFee *big.Int) int {
 	jPrice := other.GasPrice()
 	if jPrice == nil {
