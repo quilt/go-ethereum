@@ -385,7 +385,7 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 	// block limit gas.
 	var legacyGasLimit, eip1559GasLimit uint64
 	if pool.config.IsEIP1559(header.Number) {
-		legacyGasLimit = pool.config.EIP1559.MaxGas - header.GasLimit
+		legacyGasLimit = params.MaxGasEIP1559 - header.GasLimit
 		eip1559GasLimit = header.GasLimit
 	} else {
 		legacyGasLimit = header.GasLimit

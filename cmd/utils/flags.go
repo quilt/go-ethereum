@@ -749,47 +749,6 @@ var (
 		Usage: "External EVM configuration (default = built-in interpreter)",
 		Value: "",
 	}
-
-	// EIP1559 Flags
-	EIP1559CLIConfigure = cli.BoolFlag{
-		Name:  "eip1559.config",
-		Usage: "Set to true to turn on CLI-configuration of EIP1559 params",
-	}
-	EIP1559InitialBaseFee = cli.Uint64Flag{
-		Name:  "eip1559.initialbasefee",
-		Usage: "External configuration of EIP1559 initial BaseFee",
-		Value: params.EIP1559InitialBaseFee,
-	}
-	EIP1559ForkBlockNumber = cli.Uint64Flag{
-		Name:  "eip1559.forkblocknumber",
-		Usage: "External configuration of EIP1559 ForkBlockNumber",
-		Value: params.EIP1559ForkBlockNumber,
-	}
-	EIP1559BaseFeeMaxChangeDenominator = cli.Uint64Flag{
-		Name:  "eip1559.basefeemaxchangedenominator",
-		Usage: "External configuration of EIP1559 BaseFeeMaxChangeDenominator",
-		Value: params.BaseFeeMaxChangeDenominator,
-	}
-	EIP1559TargetGasUsed = cli.Uint64Flag{
-		Name:  "eip1559.targetgasused",
-		Usage: "External configuration of EIP1559 TargetGasUsed",
-		Value: params.TargetGasUsed,
-	}
-	EIP1559SlackCoefficient = cli.Uint64Flag{
-		Name:  "eip1559.slackcoefficient",
-		Usage: "External configuration of EIP1559 SlackCoefficient",
-		Value: params.SlackCoefficient,
-	}
-	EIP1559PerTransactionGasLimit = cli.Uint64Flag{
-		Name:  "eip1559.pertxgaslimit",
-		Usage: "External configuration of EIP1559 PerTransactionGasLimit",
-		Value: params.PerTransactionGasLimit,
-	}
-	EIP1559DecayRange = cli.Uint64Flag{
-		Name:  "eip1559.decayrange",
-		Usage: "External configuration of EIP1559 DecayRange",
-		Value: params.EIP1559DecayRange,
-	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1563,45 +1522,6 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 			cfg.Miner.GasPrice = big.NewInt(1)
 		}
 	}
-
-	// If we are configuring custom EIP1559 params, do so now
-	if ctx.GlobalBool(EIP1559CLIConfigure.Name) {
-		if cfg.Genesis == nil {
-			cfg.Genesis = core.DefaultGenesisBlock()
-		}
-		setEIP1559Params(ctx, cfg)
-	}
-}
-
-func setEIP1559Params(ctx *cli.Context, config *eth.Config) {
-	if ctx.GlobalIsSet(EIP1559ForkBlockNumber.Name) {
-		config.Genesis.Config.EIP1559.ForkBlockNumber = ctx.GlobalUint64(EIP1559ForkBlockNumber.Name)
-	}
-	if ctx.GlobalIsSet(EIP1559InitialBaseFee.Name) {
-		config.Genesis.Config.EIP1559.InitialBaseFee = ctx.GlobalUint64(EIP1559InitialBaseFee.Name)
-	}
-	if ctx.GlobalIsSet(EIP1559TargetGasUsed.Name) {
-		config.Genesis.Config.EIP1559.TargetGasUsed = ctx.GlobalUint64(EIP1559TargetGasUsed.Name)
-	}
-	if ctx.GlobalIsSet(EIP1559SlackCoefficient.Name) {
-		config.Genesis.Config.EIP1559.SlackCoefficient = ctx.GlobalUint64(EIP1559SlackCoefficient.Name)
-	}
-	if ctx.GlobalIsSet(EIP1559PerTransactionGasLimit.Name) {
-		config.Genesis.Config.EIP1559.PerTransactionGasLimit = ctx.GlobalUint64(EIP1559PerTransactionGasLimit.Name)
-	}
-	if ctx.GlobalIsSet(EIP1559BaseFeeMaxChangeDenominator.Name) {
-		config.Genesis.Config.EIP1559.BaseFeeMaxChangeDenominator = ctx.GlobalUint64(EIP1559BaseFeeMaxChangeDenominator.Name)
-	}
-	if ctx.GlobalIsSet(EIP1559DecayRange.Name) {
-		config.Genesis.Config.EIP1559.DecayRange = ctx.GlobalUint64(EIP1559DecayRange.Name)
-	}
-	// Re-calculate the derived config params
-	config.Genesis.Config.EIP1559.ForkFinalizedBlockNumber = config.Genesis.Config.EIP1559.ForkBlockNumber + config.Genesis.Config.EIP1559.DecayRange
-	config.Genesis.Config.EIP1559.MaxGas = config.Genesis.Config.EIP1559.SlackCoefficient * config.Genesis.Config.EIP1559.TargetGasUsed
-	config.Genesis.Config.EIP1559.GasIncrementAmount = (config.Genesis.Config.EIP1559.MaxGas / 2) / config.Genesis.Config.EIP1559.DecayRange
-	config.Genesis.Config.EIP1559Block = new(big.Int).SetUint64(config.Genesis.Config.EIP1559.ForkBlockNumber)
-	config.Genesis.Config.EIP1559FinalizedBlock = new(big.Int).SetUint64(config.Genesis.Config.EIP1559.ForkFinalizedBlockNumber)
-	config.Miner.PerTxGasLimit = config.Genesis.Config.EIP1559.PerTransactionGasLimit
 }
 
 // RegisterEthService adds an Ethereum client to the stack.
