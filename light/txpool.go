@@ -360,9 +360,6 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 	if tx.GasPrice() != nil && (tx.GasPremium() != nil || tx.FeeCap() != nil) {
 		return core.ErrTxSetsLegacyAndEIP1559Fields
 	}
-	if tx.GasPrice() == nil && (tx.GasPremium() == nil || tx.FeeCap() == nil) {
-		return core.ErrMissingGasFields
-	}
 
 	// Validate sender
 	var (

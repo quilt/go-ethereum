@@ -109,9 +109,6 @@ var (
 	// the current header does not provide a BaseFee
 	ErrNoBaseFee = errors.New("current header does not provide the BaseFee needed to process EIP1559 transactions")
 
-	// ErrMissingGasFields is returned if neither GasPrice nor GasPremium and FeeCap are set
-	ErrMissingGasFields = errors.New("either GasPrice or GasPremium and FeeCap need to be set")
-
 	// ErrExceedGasLimit is returned if a transaction uses more gas than the allowed per-tx limit
 	ErrExceedGasLimit = errors.New("transaction gas usage exceeds the per-transaction limit")
 )
@@ -582,9 +579,6 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	if tx.GasPrice() != nil && (tx.GasPremium() != nil || tx.FeeCap() != nil) {
 		return ErrTxSetsLegacyAndEIP1559Fields
-	}
-	if tx.GasPrice() == nil && (tx.GasPremium() == nil || tx.FeeCap() == nil) {
-		return ErrMissingGasFields
 	}
 	// Set the gasPrice to the tx.GasPrice() if it is non nil (legacy transaction)
 	var gasPrice *big.Int
