@@ -95,11 +95,11 @@ var (
 
 	// ErrTxNotEIP1559 is returned if we have reached the EIP1559 finalized block height
 	// and the input transaction does not conform to with EIP1559
-	ErrTxNotEIP1559 = fmt.Errorf("after block %d EIP1559 is finalized and transactions must contain a GasPremium and FeeCap and not contain a GasPrice", params.EIP1559ForkFinalizedBlockNumber)
+	ErrTxNotEIP1559 = fmt.Errorf("EIP1559 is finalized and transactions must contain a GasPremium and FeeCap and not contain a GasPrice")
 
 	// ErrTxIsEIP1559 is returned if we have not reached the EIP1559 activation block height
 	// and the input transaction is not of the legacy type
-	ErrTxIsEIP1559 = fmt.Errorf("before block %d EIP1559 is not activated and transactions must contain a GasPrice and not contain a GasPremium or FeeCap", params.EIP1559ForkBlockNumber)
+	ErrTxIsEIP1559 = fmt.Errorf("EIP1559 is not activated and transactions must contain a GasPrice and not contain a GasPremium or FeeCap")
 
 	// ErrTxSetsLegacyAndEIP1559Fields is returned if a transaction attempts to set
 	// both legacy (GasPrice) and EIP1559 (GasPremium and FeeCap) fields
@@ -1266,7 +1266,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	pool.pendingNonces = newTxNoncer(statedb)
 
 	if pool.chainconfig.IsEIP1559(newHead.Number) {
-		pool.currentLegacyMaxGas = pool.chainconfig.EIP1559.MaxGas - newHead.GasLimit
+		pool.currentLegacyMaxGas = params.MaxGasEIP1559 - newHead.GasLimit
 		pool.currentEIP1559MaxGas = newHead.GasLimit
 	} else {
 		pool.currentLegacyMaxGas = newHead.GasLimit
