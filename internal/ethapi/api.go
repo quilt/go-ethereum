@@ -810,7 +810,7 @@ func (args *CallArgs) ToMessage(globalGasCap uint64) types.Message {
 		data = []byte(*args.Data)
 	}
 
-	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, false)
+	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, false, nil, nil)
 	return msg
 }
 
@@ -835,30 +835,30 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 	eip1559 := b.ChainConfig().IsEIP1559(b.CurrentBlock().Number())
 	eip1559Finalized := b.ChainConfig().IsEIP1559Finalized(b.CurrentBlock().Number())
 	if eip1559 && b.CurrentBlock().BaseFee() == nil {
-		return nil, 0, false, core.ErrNoBaseFee
+		return nil, core.ErrNoBaseFee
 	}
 	if eip1559Finalized && (args.GasPremium == nil || args.FeeCap == nil || args.GasPrice != nil) {
-		return nil, 0, false, core.ErrTxNotEIP1559
+		return nil, core.ErrTxNotEIP1559
 	}
 	if !eip1559 && (args.GasPremium != nil || args.FeeCap != nil || args.GasPrice == nil) {
-		return nil, 0, false, core.ErrTxIsEIP1559
+		return nil, core.ErrTxIsEIP1559
 	}
 	if args.GasPrice != nil && (args.GasPremium != nil || args.FeeCap != nil) {
-		return nil, 0, false, core.ErrTxSetsLegacyAndEIP1559Fields
+		return nil, core.ErrTxSetsLegacyAndEIP1559Fields
 	}
 	if args.FeeCap != nil && args.GasPremium == nil {
-		return nil, 0, false, errors.New("if FeeCap is set, GasPremium must be set")
+		return nil, errors.New("if FeeCap is set, GasPremium must be set")
 	}
 	if args.GasPremium != nil {
 		if args.FeeCap == nil {
-			return nil, 0, false, errors.New("if GasPremium is set, FeeCap must be set")
+			return nil, errors.New("if GasPremium is set, FeeCap must be set")
 		}
 		gasPrice := new(big.Int).Add(b.CurrentBlock().BaseFee(), args.GasPremium.ToInt())
 		if gasPrice.Cmp(args.FeeCap.ToInt()) > 0 {
 			gasPrice.Set(args.FeeCap.ToInt())
 		}
 		if gasPrice.Cmp(b.CurrentBlock().BaseFee()) < 0 {
-			return nil, 0, false, core.ErrEIP1559GasPriceLessThanBaseFee
+			return nil, core.ErrEIP1559GasPriceLessThanBaseFee
 		}
 	}
 
@@ -894,38 +894,6 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 			}
 		}
 	}
-
-	// Set default gas & gas price if none were set
-	gas := uint64(math.MaxUint64 / 2)
-	if args.Gas != nil {
-		gas = uint64(*args.Gas)
-	}
-	if globalGasCap != nil && globalGasCap.Uint64() < gas {
-		log.Warn("Caller gas above allowance, capping", "requested", gas, "cap", globalGasCap)
-		gas = globalGasCap.Uint64()
-	}
-
-	var gasPrice *big.Int
-	if args.GasPremium == nil {
-		gasPrice = new(big.Int).SetUint64(defaultGasPrice)
-		if args.GasPrice != nil {
-			gasPrice = args.GasPrice.ToInt()
-		}
-	}
-
-	value := new(big.Int)
-	if args.Value != nil {
-		value = args.Value.ToInt()
-	}
-
-	var data []byte
-	if args.Data != nil {
-		data = []byte(*args.Data)
-	}
-
-	// Create new call message
-	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, false, (*big.Int)(args.GasPremium), (*big.Int)(args.FeeCap))
-
 	// Setup context so it may be cancelled the call has completed
 	// or, in case of unmetered gas, setup a context with a timeout.
 	var cancel context.CancelFunc

@@ -148,8 +148,12 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 
 		evm := vm.NewEVM(vmContext, statedb, chainConfig, vmConfig)
 		snapshot := statedb.Snapshot()
+		var gp1559 *core.GasPool
+		if evm.ChainConfig().IsEIP1559(vmContext.BlockNumber) {
+			gp1559 = new(core.GasPool).AddGas(math.MaxUint64)
+		}
 		// (ret []byte, usedGas uint64, failed bool, err error)
-		msgResult, err := core.ApplyMessage(evm, msg, gaspool)
+		msgResult, err := core.ApplyMessage(evm, msg, gaspool, gp1559)
 		if err != nil {
 			statedb.RevertToSnapshot(snapshot)
 			log.Info("rejected tx", "index", i, "hash", tx.Hash(), "from", msg.From(), "error", err)

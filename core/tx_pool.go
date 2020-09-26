@@ -68,14 +68,6 @@ var (
 	// with a different one without the required price bump.
 	ErrReplaceUnderpriced = errors.New("replacement transaction underpriced")
 
-	// ErrInsufficientFunds is returned if the total cost of executing a transaction
-	// is higher than the balance of the user's account.
-	ErrInsufficientFunds = errors.New("insufficient funds for gas * price + value")
-
-	// ErrIntrinsicGas is returned if the transaction is specified to use less gas
-	// than required to start the invocation.
-	ErrIntrinsicGas = errors.New("intrinsic gas too low")
-
 	// ErrLegacyGasLimit is returned if a transaction's requested gas limit exceeds the
 	// maximum allowance of the current block for legacy transactions.
 	ErrLegacyGasLimit = errors.New("exceeds block gas limit for legacy transactions")
@@ -624,7 +616,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
-	if !local && tx.GasPriceIntCmp(pool.gasPrice) < 0 {
+	if !local && tx.GasPriceIntCmp(pool.gasPrice, pool.chain.CurrentBlock().BaseFee()) < 0 {
 		return ErrUnderpriced
 	}
 	// Ensure the transaction adheres to nonce ordering

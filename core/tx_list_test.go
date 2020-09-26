@@ -64,7 +64,7 @@ func BenchmarkTxListAdd(t *testing.B) {
 	priceLimit := big.NewInt(int64(DefaultTxPoolConfig.PriceLimit))
 	t.ResetTimer()
 	for _, v := range rand.Perm(len(txs)) {
-		list.Add(txs[v], DefaultTxPoolConfig.PriceBump)
-		list.Filter(priceLimit, DefaultTxPoolConfig.PriceBump)
+		list.Add(txs[v], DefaultTxPoolConfig.PriceBump, nil)
+		list.Filter(priceLimit, DefaultTxPoolConfig.PriceBump, 0, nil)
 	}
 }

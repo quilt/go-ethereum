@@ -48,11 +48,11 @@ var (
 // newCanonical creates a chain database, and injects a deterministic canonical
 // chain. Depending on the full flag, if creates either a full block chain or a
 // header only chain.
-func newCanonical(engine consensus.Engine, n int, full bool, baseFee *big.Int) (ethdb.Database, *BlockChain, error) {
+func newCanonical(engine consensus.Engine, n int, full bool, chainConfig *params.ChainConfig, baseFee *big.Int) (ethdb.Database, *BlockChain, error) {
 	var (
 		db    = rawdb.NewMemoryDatabase()
 		gspec = &Genesis{
-			Config:  params.AllEthashProtocolChanges,
+			Config:  chainConfig,
 			BaseFee: baseFee}
 		genesis = gspec.MustCommit(db)
 	)

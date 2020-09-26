@@ -32,8 +32,6 @@ import (
 
 const sampleNumber = 3 // Number of transactions sampled in a block
 
-var DefaultMaxPrice = big.NewInt(500 * params.GWei)
-
 var (
 	maxPrice   = big.NewInt(500 * params.GWei)
 	maxPremium = big.NewInt(500 * params.GWei)
@@ -43,12 +41,7 @@ var (
 	errEIP1559IsNotActivated = errors.New("before EIP1559 activation, GasPremium and FeeCap cannot be set")
 )
 
-// OracleBackend includes all necessary background APIs for oracle.
-type OracleBackend interface {
-	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
-	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error)
-	ChainConfig() *params.ChainConfig
-}
+var DefaultMaxPrice = big.NewInt(500 * params.GWei)
 
 type Config struct {
 	Blocks            int
@@ -57,6 +50,13 @@ type Config struct {
 	DefaultGasPremium *big.Int `toml:",omitempty"`
 	DefaultFeeCap     *big.Int `toml:",omitempty"`
 	MaxPrice          *big.Int `toml:",omitempty"`
+}
+
+// OracleBackend includes all necessary background APIs for oracle.
+type OracleBackend interface {
+	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
+	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error)
+	ChainConfig() *params.ChainConfig
 }
 
 // Oracle recommends gas prices based on the content of recent
@@ -69,9 +69,8 @@ type Oracle struct {
 	lastCap     *big.Int
 	lastBaseFee *big.Int
 	maxPrice    *big.Int
-
-	cacheLock sync.RWMutex
-	fetchLock sync.Mutex
+	cacheLock   sync.RWMutex
+	fetchLock   sync.Mutex
 
 	checkBlocks int
 	percentile  int
@@ -193,156 +192,152 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 
 // SuggestPremium returns the recommended gas premium.
 func (gpo *Oracle) SuggestPremium(ctx context.Context) (*big.Int, error) {
-	gpo.cacheLock.RLock()
-	lastHead := gpo.lastHead
-	lastPremium := gpo.lastPremium
-	gpo.cacheLock.RUnlock()
-
 	head, _ := gpo.backend.HeaderByNumber(ctx, rpc.LatestBlockNumber)
-	if !gpo.backend.ChainConfig().IsEIP1559(head.Number) {
+	if !gpo.backend.ChainConfig().IsEIP1559Finalized(head.Number) {
 		return nil, errEIP1559IsNotActivated
 	}
 	headHash := head.Hash()
-	if headHash == lastHead {
-		return lastPremium, nil
-	}
 
-	gpo.fetchLock.Lock()
-	defer gpo.fetchLock.Unlock()
-
-	// try checking the cache again, maybe the last fetch fetched what we need
+	// If the latest gasprice is still available, return it.
 	gpo.cacheLock.RLock()
-	lastHead = gpo.lastHead
-	lastPremium = gpo.lastPremium
+	lastHead, lastPremium := gpo.lastHead, gpo.lastPremium
 	gpo.cacheLock.RUnlock()
 	if headHash == lastHead {
 		return lastPremium, nil
 	}
+	gpo.fetchLock.Lock()
+	defer gpo.fetchLock.Unlock()
 
-	blockNum := head.Number.Uint64()
-	ch := make(chan getBlockPremiumsResult, gpo.checkBlocks)
-	sent := 0
-	exp := 0
-	var blockPremiums []*big.Int
-	for sent < gpo.checkBlocks && blockNum > 0 {
-		go gpo.getBlockPremiums(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(blockNum))), blockNum, ch)
+	// Try checking the cache again, maybe the last fetch fetched what we need
+	gpo.cacheLock.RLock()
+	lastHead, lastPremium = gpo.lastHead, gpo.lastPrice
+	gpo.cacheLock.RUnlock()
+	if headHash == lastHead {
+		return lastPremium, nil
+	}
+	var (
+		sent, exp  int
+		number     = head.Number.Uint64()
+		result     = make(chan getBlockPremiumsResult, gpo.checkBlocks)
+		quit       = make(chan struct{})
+		txPremiums []*big.Int
+	)
+	for sent < gpo.checkBlocks && number > 0 {
+		go gpo.getBlockPremiums(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
 		sent++
 		exp++
-		blockNum--
+		number--
 	}
-	maxEmpty := gpo.maxEmpty
 	for exp > 0 {
-		res := <-ch
+		res := <-result
 		if res.err != nil {
+			close(quit)
 			return lastPremium, res.err
 		}
 		exp--
-		if res.premium != nil {
-			blockPremiums = append(blockPremiums, res.premium)
-			continue
+		// Nothing returned. There are two special cases here:
+		// - The block is empty
+		// - All the transactions included are sent by the miner itself.
+		// In these cases, use the latest calculated price for samping.
+		if len(res.premiums) == 0 {
+			res.premiums = []*big.Int{lastPremium}
 		}
-		if maxEmpty > 0 {
-			maxEmpty--
-			continue
-		}
-		if blockNum > 0 && sent < gpo.maxBlocks {
-			go gpo.getBlockPremiums(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(blockNum))), blockNum, ch)
+		// Besides, in order to collect enough data for sampling, if nothing
+		// meaningful returned, try to query more blocks. But the maximum
+		// is 2*checkBlocks.
+		if len(res.premiums) == 1 && len(txPremiums)+1+exp < gpo.checkBlocks*2 && number > 0 {
+			go gpo.getBlockPremiums(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
 			sent++
 			exp++
-			blockNum--
+			number--
 		}
+		txPremiums = append(txPremiums, res.premiums...)
 	}
 	premium := lastPremium
-	if len(blockPremiums) > 0 {
-		sort.Sort(bigIntArray(blockPremiums))
-		premium = blockPremiums[(len(blockPremiums)-1)*gpo.percentile/100]
+	if len(txPremiums) > 0 {
+		sort.Sort(bigIntArray(txPremiums))
+		premium = txPremiums[(len(txPremiums)-1)*gpo.percentile/100]
 	}
-	if premium.Cmp(maxPremium) > 0 {
-		premium = new(big.Int).Set(maxPremium)
-	}
-
 	gpo.cacheLock.Lock()
 	gpo.lastHead = headHash
-	gpo.lastPremium = premium
+	gpo.lastPrice = premium
 	gpo.cacheLock.Unlock()
 	return premium, nil
 }
 
-// SuggestCap returns the recommended fee cap.
+// SuggestCap returns the recommended gas premium.
 func (gpo *Oracle) SuggestCap(ctx context.Context) (*big.Int, error) {
-	gpo.cacheLock.RLock()
-	lastHead := gpo.lastHead
-	lastCap := gpo.lastCap
-	gpo.cacheLock.RUnlock()
-
 	head, _ := gpo.backend.HeaderByNumber(ctx, rpc.LatestBlockNumber)
-	if !gpo.backend.ChainConfig().IsEIP1559(head.Number) {
+	if !gpo.backend.ChainConfig().IsEIP1559Finalized(head.Number) {
 		return nil, errEIP1559IsNotActivated
 	}
 	headHash := head.Hash()
-	if headHash == lastHead {
-		return lastCap, nil
-	}
 
-	gpo.fetchLock.Lock()
-	defer gpo.fetchLock.Unlock()
-
-	// try checking the cache again, maybe the last fetch fetched what we need
+	// If the latest gasprice is still available, return it.
 	gpo.cacheLock.RLock()
-	lastHead = gpo.lastHead
-	lastCap = gpo.lastCap
+	lastHead, lastCap := gpo.lastHead, gpo.lastCap
 	gpo.cacheLock.RUnlock()
 	if headHash == lastHead {
 		return lastCap, nil
 	}
+	gpo.fetchLock.Lock()
+	defer gpo.fetchLock.Unlock()
 
-	blockNum := head.Number.Uint64()
-	ch := make(chan getBlockCapsResult, gpo.checkBlocks)
-	sent := 0
-	exp := 0
-	var blockCaps []*big.Int
-	for sent < gpo.checkBlocks && blockNum > 0 {
-		go gpo.getBlockCaps(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(blockNum))), blockNum, ch)
+	// Try checking the cache again, maybe the last fetch fetched what we need
+	gpo.cacheLock.RLock()
+	lastHead, lastCap = gpo.lastHead, gpo.lastCap
+	gpo.cacheLock.RUnlock()
+	if headHash == lastHead {
+		return lastCap, nil
+	}
+	var (
+		sent, exp int
+		number    = head.Number.Uint64()
+		result    = make(chan getBlockCapsResult, gpo.checkBlocks)
+		quit      = make(chan struct{})
+		txCaps    []*big.Int
+	)
+	for sent < gpo.checkBlocks && number > 0 {
+		go gpo.getBlockCaps(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
 		sent++
 		exp++
-		blockNum--
+		number--
 	}
-	maxEmpty := gpo.maxEmpty
 	for exp > 0 {
-		res := <-ch
+		res := <-result
 		if res.err != nil {
+			close(quit)
 			return lastCap, res.err
 		}
 		exp--
-		if res.cap != nil {
-			blockCaps = append(blockCaps, res.cap)
-			continue
+		// Nothing returned. There are two special cases here:
+		// - The block is empty
+		// - All the transactions included are sent by the miner itself.
+		// In these cases, use the latest calculated price for samping.
+		if len(res.caps) == 0 {
+			res.caps = []*big.Int{lastCap}
 		}
-		if maxEmpty > 0 {
-			maxEmpty--
-			continue
-		}
-		if blockNum > 0 && sent < gpo.maxBlocks {
-			go gpo.getBlockCaps(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(blockNum))), blockNum, ch)
+		// Besides, in order to collect enough data for sampling, if nothing
+		// meaningful returned, try to query more blocks. But the maximum
+		// is 2*checkBlocks.
+		if len(res.caps) == 1 && len(txCaps)+1+exp < gpo.checkBlocks*2 && number > 0 {
+			go gpo.getBlockCaps(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
 			sent++
 			exp++
-			blockNum--
+			number--
 		}
+		txCaps = append(txCaps, res.caps...)
 	}
-	cap := lastCap
-	if len(blockCaps) > 0 {
-		sort.Sort(bigIntArray(blockCaps))
-		cap = blockCaps[(len(blockCaps)-1)*gpo.percentile/100]
+	fc := lastCap
+	if len(txCaps) > 0 {
+		sort.Sort(bigIntArray(txCaps))
+		fc = txCaps[(len(txCaps)-1)*gpo.percentile/100]
 	}
-	if cap.Cmp(maxFeeCap) > 0 {
-		cap = new(big.Int).Set(maxFeeCap)
-	}
-
 	gpo.cacheLock.Lock()
 	gpo.lastHead = headHash
-	gpo.lastCap = cap
+	gpo.lastCap = fc
 	gpo.cacheLock.Unlock()
-	return cap, nil
+	return fc, nil
 }
 
 type getBlockPricesResult struct {
@@ -351,13 +346,13 @@ type getBlockPricesResult struct {
 }
 
 type getBlockPremiumsResult struct {
-	premium *big.Int
-	err     error
+	premiums []*big.Int
+	err      error
 }
 
 type getBlockCapsResult struct {
-	cap *big.Int
-	err error
+	caps []*big.Int
+	err  error
 }
 
 type transactionsByGasPrice struct {
@@ -440,91 +435,106 @@ func (gpo *Oracle) getBlockPrices(ctx context.Context, signer types.Signer, bloc
 		return
 	}
 	blockTxs := block.Transactions()
-	txs := new(transactionsByGasPrice)
-	txs.txs = make([]*types.Transaction, len(blockTxs))
-	copy(txs.txs, blockTxs)
-	txs.baseFee = block.BaseFee()
-	sort.Sort(txs)
+	txs := make([]*types.Transaction, len(blockTxs))
+	copy(txs, blockTxs)
+	sort.Sort(&transactionsByGasPrice{txs, block.BaseFee()})
 
-	for _, tx := range txs.txs {
+	var prices []*big.Int
+	for _, tx := range txs {
 		sender, err := types.Sender(signer, tx)
-		if err != nil || sender == block.Coinbase() {
-			continue
-		}
-		price := tx.GasPrice()
-		if price == nil {
-			price = new(big.Int).Add(block.BaseFee(), tx.GasPremium())
-			if price.Cmp(tx.FeeCap()) > 0 {
-				price.Set(tx.FeeCap())
+		if err == nil && sender != block.Coinbase() {
+			price := tx.GasPrice()
+			if price == nil {
+				price = new(big.Int).Add(block.BaseFee(), tx.GasPremium())
+				if price.Cmp(tx.FeeCap()) > 0 {
+					price.Set(tx.FeeCap())
+				}
+			}
+			prices = append(prices, price)
+			if len(prices) >= limit {
+				break
 			}
 		}
-		ch <- getBlockPricesResult{price, nil}
-		return
 	}
-	ch <- getBlockPricesResult{nil, nil}
+	select {
+	case result <- getBlockPricesResult{prices, nil}:
+	case <-quit:
+	}
 }
 
 // getBlockPremiums calculates the lowest transaction gas premium in a given block
 // and sends it to the result channel. If the block is empty, price is nil.
-func (gpo *Oracle) getBlockPremiums(ctx context.Context, signer types.Signer, blockNum uint64, ch chan getBlockPremiumsResult) {
+func (gpo *Oracle) getBlockPremiums(ctx context.Context, signer types.Signer, blockNum uint64, limit int, result chan getBlockPremiumsResult, quit chan struct{}) {
 	block, err := gpo.backend.BlockByNumber(ctx, rpc.BlockNumber(blockNum))
 	if block == nil {
-		ch <- getBlockPremiumsResult{nil, err}
+		select {
+		case result <- getBlockPremiumsResult{nil, err}:
+		case <-quit:
+		}
 		return
 	}
-
 	blockTxs := block.Transactions()
-	txs := new(transactionsByGasPremium)
-	txs.txs = make([]*types.Transaction, len(blockTxs))
-	copy(txs.txs, blockTxs)
-	txs.baseFee = block.BaseFee()
-	sort.Sort(txs)
+	txs := make([]*types.Transaction, len(blockTxs))
+	copy(txs, blockTxs)
+	sort.Sort(&transactionsByGasPremium{txs, block.BaseFee()})
 
-	for _, tx := range txs.txs {
+	var premiums []*big.Int
+	for _, tx := range txs {
 		sender, err := types.Sender(signer, tx)
-		if err != nil || sender == block.Coinbase() {
-			continue
-		}
-		premium := tx.GasPremium()
-		if premium == nil {
-			premium = new(big.Int).Sub(tx.GasPrice(), block.BaseFee())
-			if premium.Cmp(common.Big0) < 0 {
-				premium.Set(common.Big0)
+		if err == nil && sender != block.Coinbase() {
+			premium := tx.GasPremium()
+			if premium == nil {
+				premium = new(big.Int).Sub(tx.GasPrice(), block.BaseFee())
+				if premium.Cmp(common.Big0) < 0 {
+					premium.Set(common.Big0)
+				}
+				premiums = append(premiums, premium)
+				if len(premiums) >= limit {
+					break
+				}
 			}
 		}
-		ch <- getBlockPremiumsResult{premium, nil}
-		return
+		select {
+		case result <- getBlockPremiumsResult{premiums, nil}:
+		case <-quit:
+		}
 	}
-	ch <- getBlockPremiumsResult{nil, nil}
 }
 
 // getBlockCaps calculates the lowest transaction fee cap in a given block
 // and sends it to the result channel. If the block is empty, price is nil.
-func (gpo *Oracle) getBlockCaps(ctx context.Context, signer types.Signer, blockNum uint64, ch chan getBlockCapsResult) {
+func (gpo *Oracle) getBlockCaps(ctx context.Context, signer types.Signer, blockNum uint64, limit int, result chan getBlockCapsResult, quit chan struct{}) {
 	block, err := gpo.backend.BlockByNumber(ctx, rpc.BlockNumber(blockNum))
 	if block == nil {
-		ch <- getBlockCapsResult{nil, err}
+		select {
+		case result <- getBlockCapsResult{nil, err}:
+		case <-quit:
+		}
 		return
 	}
-
 	blockTxs := block.Transactions()
 	txs := make([]*types.Transaction, len(blockTxs))
 	copy(txs, blockTxs)
 	sort.Sort(transactionsByFeeCap(txs))
 
+	var caps []*big.Int
 	for _, tx := range txs {
 		sender, err := types.Sender(signer, tx)
-		if err != nil || sender == block.Coinbase() {
-			continue
+		if err == nil && sender != block.Coinbase() {
+			fc := tx.FeeCap()
+			if fc == nil {
+				fc = tx.GasPrice()
+			}
+			caps = append(caps, fc)
+			if len(caps) >= limit {
+				break
+			}
 		}
-		cap := tx.FeeCap()
-		if cap == nil {
-			cap = tx.GasPrice()
-		}
-		ch <- getBlockCapsResult{cap, nil}
-		return
 	}
-	ch <- getBlockCapsResult{nil, nil}
+	select {
+	case result <- getBlockCapsResult{caps, nil}:
+	case <-quit:
+	}
 }
 
 type bigIntArray []*big.Int

@@ -99,9 +99,9 @@ func (b *testBackend) GetBlockByNumber(number uint64) *types.Block {
 
 func TestSuggestPrice(t *testing.T) {
 	config := Config{
-		Blocks:     3,
-		Percentile: 60,
-		Default:    big.NewInt(params.GWei),
+		Blocks:          3,
+		Percentile:      60,
+		DefaultGasPrice: big.NewInt(params.GWei),
 	}
 	backend := newTestBackend(t)
 	oracle := NewOracle(backend, config)
