@@ -3064,14 +3064,13 @@ func TestEIP2718Transition(t *testing.T) {
 	)
 
 	blocks, _ := GenerateChain(gspec.Config, genesis, engine, db, 1, func(i int, b *BlockGen) {
-		zero := common.HexToHash("0x00")
 		b.SetCoinbase(common.Address{1})
 
 		// One transaction to AAAA
 		accesses := types.AccessList{types.AccessTuple{
 			Address: &aa,
 			StorageKeys: []*common.Hash{
-				&zero,
+				{0},
 			},
 		}}
 
@@ -3096,7 +3095,7 @@ func TestEIP2718Transition(t *testing.T) {
 
 	expected := params.TxGas + params.TxAccessListAddress + params.TxAccessListStorageKey + vm.GasQuickStep*2 + vm.WarmStorageReadCostEIP2929 + vm.ColdSloadCostEIP2929
 	if block.GasUsed() != expected {
-		t.Fatalf("incorrect amount of gas spent: expected %d, got %d", 25402, block.GasUsed())
+		t.Fatalf("incorrect amount of gas spent: expected %d, got %d", expected, block.GasUsed())
 
 	}
 }
