@@ -23,26 +23,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-type AccessTuple struct {
-	Address     *common.Address `json:"address"        gencodec:"required"`
-	StorageKeys []*common.Hash  `json:"storageKeys"    gencodec:"required"`
-}
-
-type AccessList []AccessTuple
-
-func (al *AccessList) Addresses() int { return len(*al) }
-func (al *AccessList) StorageKeys() int {
-	sum := 0
-	for _, tuple := range *al {
-		sum += len(tuple.StorageKeys)
-	}
-	return sum
-}
-
-type AccessListTransaction struct {
+type DynamicFeeTransaction struct {
 	Chain        *big.Int        `json:"chainId"    gencodec:"required"`
 	AccountNonce uint64          `json:"nonce"      gencodec:"required"`
-	Price        *big.Int        `json:"gasPrice"   gencodec:"required"`
+	InclusionFee *big.Int        `json:"inclusionFee"   gencodec:"required"`
+	GasFee       *big.Int        `json:"gasFee"   gencodec:"required"`
 	GasLimit     uint64          `json:"gas"        gencodec:"required"`
 	Recipient    *common.Address `json:"to"         rlp:"nil"` // nil means contract creation
 	Amount       *big.Int        `json:"value"      gencodec:"required"`
@@ -55,19 +40,19 @@ type AccessListTransaction struct {
 	S *big.Int `json:"s" gencodec:"required"`
 }
 
-func NewAccessListTransaction(chainId *big.Int, nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, accesses *AccessList) *Transaction {
-	return newAccessListTransaction(chainId, nonce, &to, amount, gasLimit, gasPrice, data, accesses)
+func NewDynamicFeeTransaction(chainId *big.Int, nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasFee, tip *big.Int, data []byte, accesses *AccessList) *Transaction {
+	return newDynamicFeeTransaction(chainId, nonce, &to, amount, gasLimit, gasFee, tip, data, accesses)
 }
 
-func NewAccessListContractCreation(chainId *big.Int, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, accesses *AccessList) *Transaction {
-	return newAccessListTransaction(chainId, nonce, nil, amount, gasLimit, gasPrice, data, accesses)
+func NewDynamicFeeContractCreation(chainId *big.Int, nonce uint64, amount *big.Int, gasLimit uint64, gasFee, tip *big.Int, data []byte, accesses *AccessList) *Transaction {
+	return newDynamicFeeTransaction(chainId, nonce, nil, amount, gasLimit, gasFee, tip, data, accesses)
 }
 
-func newAccessListTransaction(chainId *big.Int, nonce uint64, to *common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, accesses *AccessList) *Transaction {
+func newDynamicFeeTransaction(chainId *big.Int, nonce uint64, to *common.Address, amount *big.Int, gasLimit uint64, gasFee, tip *big.Int, data []byte, accesses *AccessList) *Transaction {
 	if len(data) > 0 {
 		data = common.CopyBytes(data)
 	}
-	i := AccessListTransaction{
+	i := DynamicFeeTransaction{
 		Chain:        new(big.Int),
 		AccountNonce: nonce,
 		Recipient:    to,
@@ -75,7 +60,8 @@ func newAccessListTransaction(chainId *big.Int, nonce uint64, to *common.Address
 		Accesses:     &AccessList{},
 		Amount:       new(big.Int),
 		GasLimit:     gasLimit,
-		Price:        new(big.Int),
+		InclusionFee: new(big.Int),
+		GasFee:       new(big.Int),
 		V:            new(big.Int),
 		R:            new(big.Int),
 		S:            new(big.Int),
@@ -86,33 +72,36 @@ func newAccessListTransaction(chainId *big.Int, nonce uint64, to *common.Address
 	if amount != nil {
 		i.Amount.Set(amount)
 	}
-	if gasPrice != nil {
-		i.Price.Set(gasPrice)
-	}
 	if accesses != nil {
 		i.Accesses = accesses
 	}
+	if gasFee != nil {
+		i.GasFee.Set(gasFee)
+	}
+	if tip != nil {
+		i.InclusionFee.Set(tip)
+	}
 	return &Transaction{
-		typ:   AccessListTxId,
+		typ:   DynamicFeeTxId,
 		inner: &i,
 		time:  time.Now(),
 	}
 }
 
-func (tx *AccessListTransaction) ChainId() *big.Int       { return tx.Chain }
-func (tx *AccessListTransaction) Protected() bool         { return true }
-func (tx *AccessListTransaction) AccessList() *AccessList { return tx.Accesses }
-func (tx *AccessListTransaction) Data() []byte            { return common.CopyBytes(tx.Payload) }
-func (tx *AccessListTransaction) Gas() uint64             { return tx.GasLimit }
-func (tx *AccessListTransaction) FeeCap() *big.Int        { return new(big.Int).Set(tx.Price) }
-func (tx *AccessListTransaction) Tip() *big.Int           { return new(big.Int).Set(tx.Price) }
-func (tx *AccessListTransaction) Value() *big.Int         { return new(big.Int).Set(tx.Amount) }
-func (tx *AccessListTransaction) Nonce() uint64           { return tx.AccountNonce }
-func (tx *AccessListTransaction) CheckNonce() bool        { return true }
+func (tx *DynamicFeeTransaction) ChainId() *big.Int       { return tx.Chain }
+func (tx *DynamicFeeTransaction) Protected() bool         { return true }
+func (tx *DynamicFeeTransaction) AccessList() *AccessList { return tx.Accesses }
+func (tx *DynamicFeeTransaction) Data() []byte            { return common.CopyBytes(tx.Payload) }
+func (tx *DynamicFeeTransaction) Gas() uint64             { return tx.GasLimit }
+func (tx *DynamicFeeTransaction) FeeCap() *big.Int        { return new(big.Int).Set(tx.GasFee) }
+func (tx *DynamicFeeTransaction) Tip() *big.Int           { return new(big.Int).Set(tx.InclusionFee) }
+func (tx *DynamicFeeTransaction) Value() *big.Int         { return new(big.Int).Set(tx.Amount) }
+func (tx *DynamicFeeTransaction) Nonce() uint64           { return tx.AccountNonce }
+func (tx *DynamicFeeTransaction) CheckNonce() bool        { return true }
 
 // To returns the recipient address of the transaction.
 // It returns nil if the transaction is a contract creation.
-func (tx *AccessListTransaction) To() *common.Address {
+func (tx *DynamicFeeTransaction) To() *common.Address {
 	if tx.Recipient == nil {
 		return nil
 	}
@@ -122,6 +111,6 @@ func (tx *AccessListTransaction) To() *common.Address {
 
 // RawSignatureValues returns the V, R, S signature values of the transaction.
 // The return values should not be modified by the caller.
-func (tx *AccessListTransaction) RawSignatureValues() (v, r, s *big.Int) {
+func (tx *DynamicFeeTransaction) RawSignatureValues() (v, r, s *big.Int) {
 	return tx.V, tx.R, tx.S
 }

@@ -143,7 +143,7 @@ func (s EIP2718Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *bi
 		V = big.NewInt(int64(sig[64] + 35))
 		V.Add(V, s.chainIdMul)
 	}
-	if tx.Type() == AccessListTxId {
+	if tx.Type() == AccessListTxId || tx.Type() == DynamicFeeTxId {
 		V = big.NewInt(int64(sig[64]))
 	}
 	return R, S, V, nil
@@ -174,6 +174,16 @@ func (s EIP2718Signer) Hash(tx *Transaction) common.Hash {
 			tx.Value(),
 			tx.Data(),
 			tx.AccessList(),
+		})
+	case DynamicFeeTxId:
+		return rlpHash([]interface{}{
+			tx.Type(),
+			tx.Nonce(),
+			tx.FeeCap(),
+			tx.Tip(),
+			tx.To(),
+			tx.Value(),
+			tx.Data(),
 		})
 	default:
 		// This _should_ not happen, but in case someone sends in a bad
