@@ -286,6 +286,7 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 			Recipient:    inner.Recipient,
 			Amount:       inner.Amount,
 			Payload:      inner.Payload,
+			Accesses:     inner.Accesses,
 
 			V: inner.V,
 			R: inner.R,
