@@ -272,7 +272,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 
 	// Verify the block's gas usage and (if applicable) verify the base fee.
 	if chain.Config().IsTokyo(header.Number) {
-		if err := misc.VerifyEip1559Header(parent, header); err != nil {
+		if err := misc.VerifyEip1559Header(parent, header, chain.Config().IsTokyo(parent.Number)); err != nil {
 			return err
 		}
 	} else {
@@ -603,7 +603,7 @@ func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 	hasher := sha3.NewLegacyKeccak256()
 
-	rlp.Encode(hasher, []interface{}{
+	enc := []interface{}{
 		header.ParentHash,
 		header.UncleHash,
 		header.Coinbase,
@@ -617,7 +617,11 @@ func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 		header.GasUsed,
 		header.Time,
 		header.Extra,
-	})
+	}
+	if header.BaseFee != nil {
+		enc = append(enc, header.BaseFee)
+	}
+	rlp.Encode(hasher, enc)
 	hasher.Sum(hash[:0])
 	return hash
 }
