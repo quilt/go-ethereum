@@ -74,6 +74,7 @@ type Message interface {
 	CheckNonce() bool
 	Data() []byte
 	AccessList() *types.AccessList
+	IsLegacy() bool
 }
 
 // ExecutionResult includes all output after executing given evm
@@ -188,7 +189,7 @@ func (st *StateTransition) to() common.Address {
 
 func (st *StateTransition) buyGas() error {
 	price := st.gasPrice
-	if st.evm.ChainConfig().IsTokyo(st.evm.Context.BlockNumber) {
+	if !st.msg.IsLegacy() && st.evm.ChainConfig().IsTokyo(st.evm.Context.BlockNumber) {
 		// price = min(tip, feeCap - baseFee) + baseFee
 		price = cmath.BigMin(new(big.Int).Add(st.tip, st.evm.Context.BaseFee), st.feeCap)
 	}
@@ -220,7 +221,8 @@ func (st *StateTransition) preCheck() error {
 	}
 	// Make sure the transaction feeCap is greater than the block's baseFee.
 	if st.evm.ChainConfig().IsTokyo(st.evm.Context.BlockNumber) {
-		if st.feeCap.Cmp(st.evm.Context.BaseFee) < 0 {
+		// hack for testnet to only verify EIP-1559 txs
+		if !st.msg.IsLegacy() && st.feeCap.Cmp(st.evm.Context.BaseFee) < 0 {
 			return fmt.Errorf("%w: address %v, feeCap: %d baseFee: %d", ErrFeeCapTooLow,
 				st.msg.From().Hex(), st.feeCap.Uint64(), st.evm.Context.BaseFee.Uint64())
 		}
@@ -291,7 +293,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	st.refundGas()
 
 	price := st.gasPrice
-	if st.evm.ChainConfig().IsTokyo(st.evm.Context.BlockNumber) {
+	if !st.msg.IsLegacy() && st.evm.ChainConfig().IsTokyo(st.evm.Context.BlockNumber) {
 		price = cmath.BigMin(st.tip, new(big.Int).Sub(st.feeCap, st.evm.Context.BaseFee))
 	}
 	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), price))
@@ -313,7 +315,7 @@ func (st *StateTransition) refundGas() {
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	price := st.gasPrice
-	if st.evm.ChainConfig().IsTokyo(st.evm.Context.BlockNumber) {
+	if !st.msg.IsLegacy() && st.evm.ChainConfig().IsTokyo(st.evm.Context.BlockNumber) {
 		price = cmath.BigMin(new(big.Int).Add(st.tip, st.evm.Context.BaseFee), st.feeCap)
 	}
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), price)

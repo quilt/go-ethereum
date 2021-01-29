@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -120,7 +121,28 @@ func (tx *Transaction) DecodeRLP(s *rlp.Stream) error {
 		tx.typ = LegacyTxId
 		var i *LegacyTransaction
 		err = s.Decode(&i)
-		tx.inner = i
+		if err != nil && params.OldEIP1559Encoding {
+			var old *OldDynamicFeeTransaction
+			err = s.Decode(&old)
+			if err == nil {
+				var df *DynamicFeeTransaction
+				df.Chain = new(big.Int)
+				df.AccountNonce = old.AccountNonce
+				df.InclusionFee = new(big.Int).Set(old.InclusionFee)
+				df.GasFee = new(big.Int).Set(old.GasFee)
+				df.GasLimit = old.GasLimit
+				df.Recipient = old.Recipient
+				df.Amount = old.Amount
+				df.Payload = common.CopyBytes(old.Payload)
+				df.Accesses = &AccessList{}
+				df.V = new(big.Int).Set(old.V)
+				df.R = new(big.Int).Set(old.R)
+				df.S = new(big.Int).Set(old.S)
+				tx.inner = df
+			}
+		} else {
+			tx.inner = i
+		}
 	} else if kind == rlp.String {
 		var b []byte
 		b, err = s.Bytes()
@@ -324,7 +346,24 @@ func (tx *rawtx) EncodeRLP(w io.Writer) error {
 			return err
 		}
 	}
+	if tx.typ == DynamicFeeTxId && params.OldEIP1559Encoding {
+		df := tx.inner.(*DynamicFeeTransaction)
 
+		return rlp.Encode(w, []interface{}{
+			df.AccountNonce,
+			nil,
+			df.GasLimit,
+			df.Recipient,
+			df.Amount,
+			df.Payload,
+			df.InclusionFee,
+			df.GasFee,
+			df.V,
+			df.R,
+			df.S,
+		})
+
+	}
 	return rlp.Encode(w, tx.inner)
 }
 
@@ -476,6 +515,7 @@ type Message struct {
 	data       []byte
 	accessList *AccessList
 	checkNonce bool
+	isLegacy   bool
 }
 
 func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, feeCap, tip *big.Int, data []byte, accessList *AccessList, checkNonce bool) Message {
@@ -491,6 +531,7 @@ func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *b
 		data:       data,
 		accessList: accessList,
 		checkNonce: checkNonce,
+		isLegacy:   true,
 	}
 }
 
@@ -507,6 +548,7 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 		data:       tx.Data(),
 		accessList: tx.AccessList(),
 		checkNonce: true,
+		isLegacy:   tx.Type() == LegacyTxId,
 	}
 
 	var err error
@@ -525,3 +567,4 @@ func (m Message) Nonce() uint64           { return m.nonce }
 func (m Message) Data() []byte            { return m.data }
 func (m Message) AccessList() *AccessList { return m.accessList }
 func (m Message) CheckNonce() bool        { return m.checkNonce }
+func (m Message) IsLegacy() bool          { return m.isLegacy }

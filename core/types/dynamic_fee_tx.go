@@ -115,3 +115,17 @@ func (tx *DynamicFeeTransaction) To() *common.Address {
 func (tx *DynamicFeeTransaction) RawSignatureValues() (v, r, s *big.Int) {
 	return tx.V, tx.R, tx.S
 }
+
+type OldDynamicFeeTransaction struct {
+	AccountNonce uint64
+	Price        *big.Int `rlp:"nil"`
+	InclusionFee *big.Int
+	GasFee       *big.Int
+	GasLimit     uint64
+	Recipient    *common.Address `rlp:"nil"`
+	Amount       *big.Int
+	Payload      []byte
+	V            *big.Int
+	R            *big.Int
+	S            *big.Int
+}

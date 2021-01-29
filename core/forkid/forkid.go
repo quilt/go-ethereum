@@ -227,6 +227,11 @@ func gatherForks(config *params.ChainConfig) []uint64 {
 		if field.Type != reflect.TypeOf(new(big.Int)) {
 			continue
 		}
+		// hack to make eip-1559 testnet work
+		if params.OldEIP1559Encoding && field.Name == "YoloV2Block" {
+			log.Warn("Dropping YoloV2Block in forkid calculation.")
+			continue
+		}
 		// Extract the fork rule block number and aggregate it
 		rule := conf.Field(i).Interface().(*big.Int)
 		if rule != nil {

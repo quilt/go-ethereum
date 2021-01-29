@@ -68,7 +68,9 @@ type JumpTable [256]*operation
 func newYoloV2InstructionSet() JumpTable {
 	instructionSet := newIstanbulInstructionSet()
 	enable2315(&instructionSet) // Subroutines - https://eips.ethereum.org/EIPS/eip-2315
-	enable2929(&instructionSet) // Access lists for trie accesses https://eips.ethereum.org/EIPS/eip-2929
+	if !params.OldEIP1559Encoding {
+		enable2929(&instructionSet) // Access lists for trie accesses https://eips.ethereum.org/EIPS/eip-2929
+	}
 	return instructionSet
 }
 

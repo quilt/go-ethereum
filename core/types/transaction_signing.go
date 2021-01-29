@@ -115,14 +115,14 @@ func NewEIP2718Signer(chainId *big.Int) EIP2718Signer {
 // Sender returns the recovered addressed from a transaction's signature.
 func (s EIP2718Signer) Sender(tx *Transaction) (common.Address, error) {
 	V, R, S := tx.RawSignatureValues()
-	if tx.Type() == LegacyTxId {
-		if !tx.Protected() {
+	if tx.Type() == LegacyTxId || (tx.Type() == DynamicFeeTxId && params.OldEIP1559Encoding) {
+		if !tx.Protected() || (tx.Type() == DynamicFeeTxId && isProtectedV(V)) {
 			return HomesteadSigner{}.Sender(tx)
 		}
 		V = new(big.Int).Sub(V, s.chainIdMul)
 		V.Sub(V, big8)
 	}
-	if tx.Type() == AccessListTxId || tx.Type() == DynamicFeeTxId {
+	if tx.Type() == AccessListTxId || (tx.Type() == DynamicFeeTxId && !params.OldEIP1559Encoding) {
 		// ACL txs are defined to use 0 and 1 as their recovery id, add
 		// 27 to become equivalent to unprotected Homestead signatures.
 		V = new(big.Int).Add(V, big.NewInt(27))
@@ -176,15 +176,29 @@ func (s EIP2718Signer) Hash(tx *Transaction) common.Hash {
 			tx.AccessList(),
 		})
 	case DynamicFeeTxId:
-		return rlpHash([]interface{}{
-			tx.Type(),
-			tx.Nonce(),
-			tx.FeeCap(),
-			tx.Tip(),
-			tx.To(),
-			tx.Value(),
-			tx.Data(),
-		})
+		if params.OldEIP1559Encoding {
+			return rlpHash([]interface{}{
+				tx.Nonce(),
+				tx.GasPrice(),
+				nil,
+				tx.FeeCap(),
+				tx.Tip(),
+				tx.To(),
+				tx.Value(),
+				tx.Data(),
+				s.chainId, uint(0), uint(0),
+			})
+		} else {
+			return rlpHash([]interface{}{
+				tx.Type(),
+				tx.Nonce(),
+				tx.FeeCap(),
+				tx.Tip(),
+				tx.To(),
+				tx.Value(),
+				tx.Data(),
+			})
+		}
 	default:
 		// This _should_ not happen, but in case someone sends in a bad
 		// json struct via RPC, it's probably more prudent to return an
