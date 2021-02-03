@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"container/heap"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"sync/atomic"
@@ -118,27 +119,51 @@ func (tx *Transaction) DecodeRLP(s *rlp.Stream) error {
 	if err != nil {
 		return err
 	} else if kind == rlp.List {
+		raw, err := s.Raw()
+		if err != nil {
+			return err
+		}
+
 		tx.typ = LegacyTxId
 		var i *LegacyTransaction
-		err = s.Decode(&i)
+		err = rlp.DecodeBytes(raw, &i)
+
 		if err != nil && params.OldEIP1559Encoding {
 			var old *OldDynamicFeeTransaction
-			err = s.Decode(&old)
+			err = rlp.DecodeBytes(raw, &old)
+			if err != nil {
+				fmt.Printf("ERROR DECODING OLD 1559: %s\n", err)
+			}
 			if err == nil {
-				var df *DynamicFeeTransaction
-				df.Chain = new(big.Int)
-				df.AccountNonce = old.AccountNonce
-				df.InclusionFee = new(big.Int).Set(old.InclusionFee)
-				df.GasFee = new(big.Int).Set(old.GasFee)
-				df.GasLimit = old.GasLimit
-				df.Recipient = old.Recipient
-				df.Amount = old.Amount
-				df.Payload = common.CopyBytes(old.Payload)
-				df.Accesses = &AccessList{}
-				df.V = new(big.Int).Set(old.V)
-				df.R = new(big.Int).Set(old.R)
-				df.S = new(big.Int).Set(old.S)
-				tx.inner = df
+				var data []byte
+				if len(old.Payload) > 0 {
+					data = common.CopyBytes(old.Payload)
+				}
+				i := DynamicFeeTransaction{
+					Chain:        new(big.Int),
+					AccountNonce: old.AccountNonce,
+					Recipient:    old.Recipient,
+					Payload:      data,
+					Accesses:     &AccessList{},
+					Amount:       new(big.Int),
+					GasLimit:     old.GasLimit,
+					InclusionFee: new(big.Int),
+					GasFee:       new(big.Int),
+					V:            new(big.Int).Set(old.V),
+					R:            new(big.Int).Set(old.R),
+					S:            new(big.Int).Set(old.S),
+				}
+				if old.Amount != nil {
+					i.Amount.Set(old.Amount)
+				}
+				if old.GasFee != nil {
+					i.GasFee.Set(old.GasFee)
+				}
+				if old.InclusionFee != nil {
+					i.InclusionFee.Set(old.InclusionFee)
+				}
+
+				tx.inner = &i
 			}
 		} else {
 			tx.inner = i

@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -54,8 +55,13 @@ type Msg struct {
 // For the decoding rules, please see package rlp.
 func (msg Msg) Decode(val interface{}) error {
 	s := rlp.NewStream(msg.Payload, uint64(msg.Size))
-	if err := s.Decode(val); err != nil {
+	var b []byte
+	b, err := s.Raw()
+	if err != nil {
 		return newPeerError(errInvalidMsg, "(code %x) (size %d) %v", msg.Code, msg.Size, err)
+	}
+	if err := rlp.DecodeBytes(b, val); err != nil {
+		return newPeerError(errInvalidMsg, "(code %x) (size %d) %v raw: %s", msg.Code, msg.Size, err, common.Bytes2Hex(b))
 	}
 	return nil
 }
