@@ -65,9 +65,10 @@ type Interpreter interface {
 // callCtx contains the things that are per-call, such as stack and memory,
 // but not transients like pc and gas
 type callCtx struct {
-	memory   *Memory
-	stack    *Stack
-	contract *Contract
+	memory     *Memory
+	stack      *Stack
+	contract   *Contract
+	authorized *common.Address
 }
 
 // keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
@@ -98,6 +99,8 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	if cfg.JumpTable[STOP] == nil {
 		var jt JumpTable
 		switch {
+		case evm.chainRules.IsQuilt:
+			jt = quiltInstructionSet
 		case evm.chainRules.IsBerlin:
 			jt = berlinInstructionSet
 		case evm.chainRules.IsIstanbul:
