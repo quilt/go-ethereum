@@ -198,6 +198,7 @@ var (
 	gasDelegateCallEIP2929 = makeCallVariantGasCallEIP2929(gasDelegateCall)
 	gasStaticCallEIP2929   = makeCallVariantGasCallEIP2929(gasStaticCall)
 	gasCallCodeEIP2929     = makeCallVariantGasCallEIP2929(gasCallCode)
+	gasAuthCallEIP2929     = makeCallVariantGasCallEIP2929(gasAuthCall)
 )
 
 func gasSelfdestructEIP2929(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {

@@ -417,6 +417,37 @@ func gasStaticCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memo
 	return gas, nil
 }
 
+func gasAuthCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
+	var (
+		gas            uint64
+		transfersValue = !stack.Back(2).IsZero()
+		address        = common.Address(stack.Back(1).Bytes20())
+	)
+	if transfersValue && evm.StateDB.Empty(address) {
+		gas += params.CallNewAccountGas
+	}
+	if transfersValue {
+		gas += params.CallValueTransferGas
+	}
+	memoryGas, err := memoryGasCost(mem, memorySize)
+	if err != nil {
+		return 0, err
+	}
+	var overflow bool
+	if gas, overflow = math.SafeAdd(gas, memoryGas); overflow {
+		return 0, ErrGasUintOverflow
+	}
+
+	evm.callGasTemp, err = callGas(true, contract.Gas, gas, stack.Back(0))
+	if err != nil {
+		return 0, err
+	}
+	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
+		return 0, ErrGasUintOverflow
+	}
+	return gas, nil
+}
+
 func gasSelfdestruct(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var gas uint64
 	// EIP150 homestead gas reprice fork:
