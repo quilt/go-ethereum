@@ -236,7 +236,9 @@ func opAuthCall(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) (
 
 	ret, returnGas, err := interpreter.evm.AuthCall(callContext.contract, *callContext.authorized, toAddr, args, gas, value.ToBig(), extValue.ToBig())
 
-	if err != nil {
+	if err == ErrInsufficientBalance {
+		return nil, ErrInsufficientBalance
+	} else if err != nil {
 		temp.Clear()
 	} else {
 		temp.SetOne()
