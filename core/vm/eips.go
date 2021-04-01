@@ -230,27 +230,15 @@ func opAuthCall(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) (
 	gas := interpreter.evm.callGasTemp
 	// Pop other call parameters.
 	addr, value, extValue, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
-	// Nonzero extValue not allowed in London
 	toAddr := common.Address(addr.Bytes20())
 	// Get the arguments from the memory.
 	args := callContext.memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
-	// If extValue is non-zero, fail immediately.
-	if !extValue.IsZero() {
-		temp.Clear()
-		stack.push(&temp)
-		return nil, nil
-	}
+	ret, returnGas, err := interpreter.evm.AuthCall(callContext.contract, *callContext.authorized, toAddr, args, gas, value.ToBig(), extValue.ToBig())
 
-	var bigVal = big0
-	if !value.IsZero() {
-		gas += params.CallStipend
-		bigVal = value.ToBig()
-	}
-
-	ret, returnGas, err := interpreter.evm.AuthCall(callContext.contract, *callContext.authorized, toAddr, args, gas, bigVal)
-
-	if err != nil {
+	if err == ErrInsufficientBalance {
+		return nil, ErrInsufficientBalance
+	} else if err != nil {
 		temp.Clear()
 	} else {
 		temp.SetOne()
