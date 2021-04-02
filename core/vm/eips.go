@@ -195,13 +195,7 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]by
 		if err == nil {
 			var addr common.Address
 			copy(addr[:], crypto.Keccak256(pub[1:])[12:])
-
-			// Transaction origin is not allowed to authorize itself.
-			// This is to prevent reentering contracts that expect
-			// caller == origin only in the first frame of a transaction.
-			if addr != interpreter.evm.Origin {
-				callContext.authorized = &addr
-			}
+			callContext.authorized = &addr
 		}
 	}
 
