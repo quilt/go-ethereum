@@ -57,13 +57,13 @@ var (
 	constantinopleInstructionSet   = newConstantinopleInstructionSet()
 	istanbulInstructionSet         = newIstanbulInstructionSet()
 	berlinInstructionSet           = newBerlinInstructionSet()
-	baikalInstructionSet           = newBaikalInstructionSet()
+	puxiInstructionSet             = newPuxiInstructionSet()
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
 type JumpTable [256]*operation
 
-func newBaikalInstructionSet() JumpTable {
+func newPuxiInstructionSet() JumpTable {
 	instructionSet := newBerlinInstructionSet()
 	enable3074(&instructionSet)
 	return instructionSet

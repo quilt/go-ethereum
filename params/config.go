@@ -325,7 +325,7 @@ type ChainConfig struct {
 	IstanbulBlock       *big.Int `json:"istanbulBlock,omitempty"`       // Istanbul switch block (nil = no fork, 0 = already on istanbul)
 	MuirGlacierBlock    *big.Int `json:"muirGlacierBlock,omitempty"`    // Eip-2384 (bomb delay) switch block (nil = no fork, 0 = already activated)
 	BerlinBlock         *big.Int `json:"berlinBlock,omitempty"`         // Berlin switch block (nil = no fork, 0 = already on berlin)
-	BaikalBlock         *big.Int `json:"baikalBlock,omitempty"`
+	PuxiBlock           *big.Int `json:"puxiBlock,omitempty"`
 
 	YoloV3Block *big.Int `json:"yoloV3Block,omitempty"` // YOLO v3: Gas repricings TODO @holiman add EIP references
 	EWASMBlock  *big.Int `json:"ewasmBlock,omitempty"`  // EWASM switch block (nil = no fork, 0 = already activated)
@@ -365,7 +365,7 @@ func (c *ChainConfig) String() string {
 	default:
 		engine = "unknown"
 	}
-	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, YOLO v3: %v, Baikal: %v, Engine: %v}",
+	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, YOLO v3: %v, Puxi: %v, Engine: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -380,7 +380,7 @@ func (c *ChainConfig) String() string {
 		c.MuirGlacierBlock,
 		c.BerlinBlock,
 		c.YoloV3Block,
-		c.BaikalBlock,
+		c.PuxiBlock,
 		engine,
 	)
 }
@@ -442,8 +442,8 @@ func (c *ChainConfig) IsBerlin(num *big.Int) bool {
 	return isForked(c.BerlinBlock, num) || isForked(c.YoloV3Block, num)
 }
 
-func (c *ChainConfig) IsBaikal(num *big.Int) bool {
-	return isForked(c.BaikalBlock, num)
+func (c *ChainConfig) IsPuxi(num *big.Int) bool {
+	return isForked(c.PuxiBlock, num)
 }
 
 // IsEWASM returns whether num represents a block number after the EWASM fork
@@ -556,8 +556,8 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 	if isForkIncompatible(c.BerlinBlock, newcfg.BerlinBlock, head) {
 		return newCompatError("Berlin fork block", c.BerlinBlock, newcfg.BerlinBlock)
 	}
-	if isForkIncompatible(c.BaikalBlock, newcfg.BaikalBlock, head) {
-		return newCompatError("Baikal fork block", c.BaikalBlock, newcfg.BaikalBlock)
+	if isForkIncompatible(c.PuxiBlock, newcfg.PuxiBlock, head) {
+		return newCompatError("Puxi fork block", c.PuxiBlock, newcfg.PuxiBlock)
 	}
 	if isForkIncompatible(c.YoloV3Block, newcfg.YoloV3Block, head) {
 		return newCompatError("YOLOv3 fork block", c.YoloV3Block, newcfg.YoloV3Block)
@@ -632,7 +632,7 @@ type Rules struct {
 	ChainID                                                 *big.Int
 	IsHomestead, IsEIP150, IsEIP155, IsEIP158               bool
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
-	IsBerlin, IsBaikal                                      bool
+	IsBerlin, IsPuxi                                        bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -652,6 +652,6 @@ func (c *ChainConfig) Rules(num *big.Int) Rules {
 		IsPetersburg:     c.IsPetersburg(num),
 		IsIstanbul:       c.IsIstanbul(num),
 		IsBerlin:         c.IsBerlin(num),
-		IsBaikal:         c.IsBaikal(num),
+		IsPuxi:           c.IsPuxi(num),
 	}
 }
