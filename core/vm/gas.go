@@ -43,13 +43,16 @@ func callGas(isEip150, isAuthCall bool, availableGas, base uint64, callCost *uin
 		// of returning an error.
 		if !callCost.IsUint64() || gas < callCost.Uint64() {
 			// AuthCall behaves differently than other call-like ops. If more gas is
-			// requested than is available, it throws. The single exception to this
-			// is if the requeste amount is 0. In this case, return the new gas.
-			if !isAuthCall || callCost.IsZero() {
+			// requested than is available, it throws.
+			if !isAuthCall {
 				return gas, nil
 			} else {
 				return 0, ErrInsufficientAuthCallGas
 			}
+		} else if isAuthCall && callCost.IsZero() {
+			// AuthCall has special behavior for 0 requested gas, in which case it passes
+			// in all available gas.
+			return gas, nil
 		}
 	}
 	if !callCost.IsUint64() {
