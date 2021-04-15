@@ -3053,7 +3053,7 @@ func TestEIP2718Transition(t *testing.T) {
 		address = crypto.PubkeyToAddress(key.PublicKey)
 		funds   = big.NewInt(1000000000)
 		gspec   = &Genesis{
-			Config: params.YoloV3ChainConfig,
+			Config: params.AllEthashProtocolChanges,
 			Alloc: GenesisAlloc{
 				address: {Balance: funds},
 				// The address 0xAAAA sloads 0x00 and 0x01
@@ -3069,8 +3069,10 @@ func TestEIP2718Transition(t *testing.T) {
 				},
 			},
 		}
-		genesis = gspec.MustCommit(db)
 	)
+
+	gspec.Config.BerlinBlock = big.NewInt(0)
+	genesis := gspec.MustCommit(db)
 
 	blocks, _ := GenerateChain(gspec.Config, genesis, engine, db, 1, func(i int, b *BlockGen) {
 		b.SetCoinbase(common.Address{1})
@@ -3155,6 +3157,10 @@ func TestEIP1559Transition(t *testing.T) {
 			},
 		}
 	)
+	gspec.Config.BerlinBlock = common.Big0
+	gspec.Config.AleutBlock = common.Big0
+	genesis := gspec.MustCommit(db)
+	signer := types.LatestSigner(gspec.Config)
 
 	gspec.Config.BerlinBlock = common.Big0
 	gspec.Config.AleutBlock = common.Big0

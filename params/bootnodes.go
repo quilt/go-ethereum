@@ -67,11 +67,10 @@ var GoerliBootnodes = []string{
 	"enode://a59e33ccd2b3e52d578f1fbd70c6f9babda2650f0760d6ff3b37742fdcdfdb3defba5d56d315b40c46b70198c7621e63ffa3f987389c7118634b0fefbbdfa7fd@51.15.119.157:40303",
 }
 
-// YoloV3Bootnodes are the enode URLs of the P2P bootstrap nodes running on the
-// YOLOv3 ephemeral test network.
-// TODO: Set Yolov3 bootnodes
-var YoloV3Bootnodes = []string{
-	"enode://9e1096aa59862a6f164994cb5cb16f5124d6c992cdbf4535ff7dea43ea1512afe5448dca9df1b7ab0726129603f1a3336b631e4d7a1a44c94daddd03241587f9@3.9.20.133:30303",
+// AleutBootnodes are the enode URLs of the P2P bootstrap nodes running on the
+// Aleut ephemeral test network.
+var AleutBootnodes = []string{
+	"enode://0c72e2b7873e4342d725b5990c17adb2b159aad2ff5853de7e4910b25522a1f9e78f9cd802a8a3225b8fae4e994e522b50d6bd5a163eb3a7b49a0a73ca9a1c7e@3.12.166.199:30303",
 }
 
 var V5Bootnodes = []string{
