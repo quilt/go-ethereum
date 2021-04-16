@@ -909,6 +909,12 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			}
 		}
 	}
+	// Fill in BaseFee if EIP-1559 is active
+	if w.chainConfig.IsAleut(parent.Number()) {
+		header.BaseFee = misc.CalcBaseFee(parent.Header())
+	} else if w.chainConfig.IsAleut(header.Number) {
+		header.BaseFee = new(big.Int).SetUint64(params.InitialBaseFee)
+	}
 	// Could potentially happen if starting to mine in an odd state.
 	err := w.makeCurrent(parent, header)
 	if err != nil {
