@@ -191,7 +191,7 @@ WARNING: This is a low-level operation which may cause database corruption!`,
 			utils.RopstenFlag,
 			utils.RinkebyFlag,
 			utils.GoerliFlag,
-			utils.YoloV3Flag,
+			utils.AleutFlag,
 		},
 		Description: "This command displays information about the freezer index.",
 	}

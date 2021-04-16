@@ -3162,11 +3162,6 @@ func TestEIP1559Transition(t *testing.T) {
 	genesis := gspec.MustCommit(db)
 	signer := types.LatestSigner(gspec.Config)
 
-	gspec.Config.BerlinBlock = common.Big0
-	gspec.Config.AleutBlock = common.Big0
-	genesis := gspec.MustCommit(db)
-	signer := types.LatestSigner(gspec.Config)
-
 	blocks, _ := GenerateChain(gspec.Config, genesis, engine, db, 1, func(i int, b *BlockGen) {
 		b.SetCoinbase(common.Address{1})
 
